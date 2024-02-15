@@ -1,0 +1,3 @@
+- copy '.env.example' and rename to '.env'
+- `npm install`
+- `npm start`
