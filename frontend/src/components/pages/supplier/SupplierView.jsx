@@ -43,7 +43,6 @@ const SupplierView = (props) => {
   const [search, setSearch] = useState("");
 
   const { pageLoading, setPageLoading } = usePageStore();
-  // const [modalImportCSVShow, setModalImportCSVShow] = useState(false);
 
   const [modalSplitScheduleShow, setModalSplitScheduleShow] = useState(false);
   const [modalSplitScheduleData, setModalSplitScheduleData] = useState(null);
@@ -87,7 +86,9 @@ const SupplierView = (props) => {
         setTotalData(rsBody.total);
         if (rsBody.offer && rsBody.offer.length > 0) {
           setPreviewRowChecked(
-            rsBody.offer.filter((item) => item.flag_status !== "X").map(() => false),
+            rsBody.offer
+              .filter((item) => item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE)
+              .map(() => false),
           );
 
           setArrayOfMerge(
@@ -151,17 +152,19 @@ const SupplierView = (props) => {
     {
       title: (_v, record, index) => {
         const isDataComplete = (record) => {
-          if (record.flag_status === "E") {
-            return record.flag_status !== "X";
+          if (record.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+            return record.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE;
           } else {
-            return record.po_number && record.flag_status !== "X";
+            return (
+              record.po_number && record.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE
+            );
           }
         };
         return (
           <>
             <Checkbox
               checked={previewRowChecked.every((item) => {
-                return item && item.flag_status !== "X";
+                return item && item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE;
               })}
               style={{ justifyContent: "center", display: "flex" }}
               onChange={(e) => {
@@ -171,7 +174,7 @@ const SupplierView = (props) => {
                     isChecked &&
                     isDataComplete(offers[i]) &&
                     toggleCheckboxTitle &&
-                    offers[i].flag_status !== "X",
+                    offers[i].flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE,
                 );
                 setPreviewRowChecked(updatedPreviewRowChecked);
               }}
@@ -187,7 +190,7 @@ const SupplierView = (props) => {
       key: "check",
 
       render: (_v, record, index) => {
-        if (record.flag_status === "X") return;
+        if (record.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
         const isDataComplete = (record) => {
           const poNumber = record.po_number;
           return poNumber !== undefined && poNumber !== null && poNumber !== "";
@@ -325,7 +328,10 @@ const SupplierView = (props) => {
       render: (_, row) => {
         let btnSplit;
         let btnConfirm;
-        if (row.flag_status === "E" || row.flag_status === "G") {
+        if (
+          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+        ) {
           btnSplit = (
             <Button
               className="mr-1 mb-1"
@@ -428,7 +434,7 @@ const SupplierView = (props) => {
             //count the next true value and break the loop after false and if the true is counted, ignore them
           }
         };
-        if (row.flag_status === "X") {
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
           return (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               <Tag className="ma-0" color="success">
@@ -437,7 +443,10 @@ const SupplierView = (props) => {
             </div>
           );
         }
-        if (row.flag_status === "E" || row.flag_status === "G") {
+        if (
+          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+        ) {
           btnEditAndSend = (
             <Button
               className="mr-1 mb-1"

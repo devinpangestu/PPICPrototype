@@ -22,6 +22,7 @@
     "bfj": "^7.0.2",
     "camelcase": "^6.1.0",
     "case-sensitive-paths-webpack-plugin": "2.3.0",
+    "config": "^3.3.11",
     "css-loader": "4.3.0",
     "csv-string": "^4.1.0",
     "decimal.js": "^10.3.1",
@@ -116,7 +117,9 @@
   },
   "scripts": {
     "gen-build-version": "npm version patch && node gen_build_version",
-    "dev": "vite --host",
+    "dev": " vite --host",
+    "test": " vite --host",
+    "production": " vite --host",
     "build": "vite build",
     "serve": "vite preview"
   },

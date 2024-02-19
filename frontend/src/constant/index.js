@@ -9,6 +9,7 @@ import * as prices from "./prices";
 import * as roles from "./roles";
 import * as images from "./images";
 import * as modal from "./modal";
+import * as flagStatus from "./flagStatus";
 // import * as logistic from "./logistic";
 import * as file from "./file";
 
@@ -24,6 +25,7 @@ const constant = {
   ...roles,
   ...images,
   ...modal,
+  ...flagStatus,
   // ...logistic,
   ...file,
 };

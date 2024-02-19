@@ -109,7 +109,15 @@ app.get(`${currVer}`, async (req, res) => {
   }
 });
 //nsq
-
+app.get(`${currVer}/config`, (req, res) => {
+  res.json({
+    WEB_URL: process.env.BASE_URL || "http://192.168.110.83",
+    API_URL: process.env.BASE_URL || "http://192.168.110.83",
+    WEB_PORT: process.env.WEB_PORT || 8002,
+    API_PORT: process.env.API_PORT || 9092,
+    API_TIMEOUT: process.env.API_TIMEOUT || 30000,
+  });
+});
 app.use(`${currVer}`, authRoutes);
 app.use(`${currVer}/roles`, userIsAuthenticated(), roleRoutes);
 app.use(`${currVer}`, userIsAuthenticated(), permissionRoutes);

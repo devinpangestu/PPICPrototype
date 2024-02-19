@@ -73,7 +73,10 @@ const EditableCell = ({
   }, [editing]);
 
   const toggleEdit = () => {
-    if (record.flag_status === "X" || record.flag_status === "F") {
+    if (
+      record.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+      record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST
+    ) {
       setEditing(false);
       Modal.error({
         content: "This data is already completed or in negotiation process",
@@ -193,13 +196,13 @@ const PurchasingView = (props) => {
   let defaultFilterStatus = null;
   let defaultActiveTab = "all";
   if (userInfo.role.id === 2) {
-    defaultFilterStatus = "A";
+    defaultFilterStatus = constant.FLAG_STATUS_PPIC_INIT;
     defaultActiveTab = defaultFilterStatus;
   } else if (userInfo.role.id === 3) {
-    defaultFilterStatus = "B";
+    defaultFilterStatus = constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC;
     defaultActiveTab = defaultFilterStatus;
   } else if (userInfo.role.id === 4) {
-    defaultFilterStatus = "E";
+    defaultFilterStatus = constant.FLAG_STATUS_SUPPLIER;
     defaultActiveTab = defaultFilterStatus;
   }
   const [expandable, setExpandable] = useState({
@@ -228,7 +231,7 @@ const PurchasingView = (props) => {
     },
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
-        record.flag_status === "F" &&
+        record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
         (JSON.parse(record.notes)?.edit_req_sup || JSON.parse(record.notes)?.split_req_sup);
       return checkFlagStatus(record);
     },
@@ -323,7 +326,11 @@ const PurchasingView = (props) => {
       if (rsBodyList.offer && rsBodyList.offer.length > 0) {
         setPreviewRowChecked(
           rsBodyList.offer
-            .filter((item) => item.flag_status !== "X" && item.flag_status !== "F")
+            .filter(
+              (item) =>
+                item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+                item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            )
             .map(() => false),
         );
         setArrayOfMerge(
@@ -388,13 +395,16 @@ const PurchasingView = (props) => {
     //   updatedPreviewRowChecked[index + 1] = !updatedPreviewRowChecked[index + 1];
     // }
     if (!initialChecked) {
-      if (status === "B" || status === "D") {
+      if (
+        status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+        status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+      ) {
         Modal.error({
           content: "Please fill PO Number first",
         });
       }
 
-      if (status === "X") {
+      if (status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
         Modal.error({
           content: "This data is already completed",
         });
@@ -558,35 +568,39 @@ const PurchasingView = (props) => {
     {
       title: (_, record, index) => {
         if (editTableMode) return;
-        if (filterStatus === "X") return;
-        if (filterStatus === "F") return;
+        if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
+        if (filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST) return;
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
           const poNumber = record?.po_number;
           switch (filterStatus) {
-            case "B":
+            case constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC:
               return !(
-                flagStatus === "X" ||
-                flagStatus === "F" ||
-                flagStatus === "D" ||
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
                 utils.isNull(poNumber)
               );
-            case "D":
+            case constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT:
               return !(
-                flagStatus === "X" ||
-                flagStatus === "F" ||
-                flagStatus === "B" ||
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
                 utils.isNull(poNumber)
               );
-            case "F":
+            case constant.FLAG_STATUS_PROCUREMENT_REQUEST:
               return !(
-                flagStatus === "X" ||
-                flagStatus === "B" ||
-                flagStatus === "D" ||
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
                 utils.isNull(poNumber)
               );
             default:
-              return !(flagStatus === "X" || flagStatus === "F" || poNumber === "");
+              return !(
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                poNumber === ""
+              );
           }
         };
         return (
@@ -615,14 +629,19 @@ const PurchasingView = (props) => {
 
       render: (_, record, index) => {
         if (editTableMode) return;
-        if (filterStatus === "X") return;
-        if (filterStatus === "F") return;
-        if (!filterStatus && (record?.flag_status === "X" || record?.flag_status === "F")) return;
+        if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
+        if (filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST) return;
+        if (
+          !filterStatus &&
+          (record?.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            record?.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST)
+        )
+          return;
         const isDataComplete = (record) => {
           const poNumber = record?.po_number;
           const flagStatus = record?.flag_status;
 
-          return !(utils.isNull(poNumber) || flagStatus === "X");
+          return !(utils.isNull(poNumber) || flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE);
         };
         const initialChecked = isDataComplete(record);
 
@@ -765,9 +784,10 @@ const PurchasingView = (props) => {
 
       onCell: (_, index) => {
         if (
-          filterStatus === "B" ||
-          filterStatus === "D" ||
-          (!filterStatus && dataSource[index]?.flag_status !== "F")
+          filterStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+          filterStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+          (!filterStatus &&
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST)
         )
           return;
         return { ...getCellConfig(arrayOfMerge, index) };
@@ -815,17 +835,28 @@ const PurchasingView = (props) => {
             <Tag color={color}>{text}</Tag>
           </div>
         );
-        if (flagStatus === "X") {
+        if (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
           return renderStatusTag("success", "Completed");
         }
-        if (flagStatus === "F" && row.split_from_id !== null && editTableMode) {
+        if (
+          flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.split_from_id !== null &&
+          editTableMode
+        ) {
           return renderStatusTag("warning", "Split Request");
         }
-        if (flagStatus === "F" && row.edit_from_id !== null && editTableMode) {
+        if (
+          flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.edit_from_id !== null &&
+          editTableMode
+        ) {
           return renderStatusTag("warning", "Edit Request");
         }
         if (editTableMode) return;
-        if (flagStatus === "B" || flagStatus === "D") {
+        if (
+          flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+          flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+        ) {
           btnEdit = (
             <Button
               className="mr-1 mb-1"
@@ -877,7 +908,7 @@ const PurchasingView = (props) => {
           );
         }
 
-        if (row.flag_status === "F" && !editTableMode) {
+        if (row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST && !editTableMode) {
           if (row.split_from_id !== null) {
             tagStatus = <Tag color="warning">Split Request</Tag>;
             btnAcceptSplit = (
@@ -998,7 +1029,9 @@ const PurchasingView = (props) => {
         {offers && offers.length > 0 ? (
           <>
             <Space style={{ marginBottom: "1rem" }}>
-              {(!filterStatus || filterStatus === "B" || filterStatus === "D") &&
+              {(!filterStatus ||
+                filterStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+                filterStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT) &&
                 !editTableMode && (
                   <>
                     <Button

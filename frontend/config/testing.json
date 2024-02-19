@@ -1,0 +1,5 @@
+{
+    "VITE_API_PORT": "9092",
+    "VITE_WEB_PORT": "8002"
+  }
+  

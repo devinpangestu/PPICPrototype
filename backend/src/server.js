@@ -54,7 +54,7 @@ const setupWorkerProcesses = () => {
 const setUpExpress = () => {
   dotenv.config({ path: ".env" });
 
-  const port = process.env.HTTP_PORT || 9092;
+  const port = process.env.API_PORT || 9092;
 
   const server = app.listen(port, () => {
     console.log(`App running on port ${chalk.greenBright(port)}...`);

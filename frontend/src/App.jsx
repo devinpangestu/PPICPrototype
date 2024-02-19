@@ -7,14 +7,13 @@ import { CustomRedirect } from "components";
 import utils from "utils";
 import { api } from "api";
 import CacheBuster from "CacheBuster";
+
 const App = () => {
   let chatEl = null;
   const userInfo = utils.getUserInfo();
   console.log("userInfo");
   console.log(userInfo);
-  useEffect(() => {
-   
-  }, []);
+
   console.log(document.body.style);
   // useEffect(() => {
   //   window.addEventListener("storage", (e) => {

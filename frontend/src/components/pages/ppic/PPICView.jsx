@@ -62,6 +62,9 @@ const EditableCell = ({
   const [editing, setEditing] = useState(false);
   const [currentDate, setCurrentDate] = useState(null);
   const [originalDate, setOriginalDate] = useState(null);
+  const { suppliers } = useSearchFilterStore();
+  const [newSupplier, setNewSupplier] = useState(null);
+
   const inputRef = useRef(null);
   const form = useContext(EditableContext);
 
@@ -73,12 +76,12 @@ const EditableCell = ({
 
   const toggleEdit = () => {
     if (
-      record.flag_status === "X" ||
-      record.flag_status === "G" ||
-      record.flag_status === "B" ||
-      record.flag_status === "D" ||
-      record.flag_status === "F" ||
-      record.flag_status === "E"
+      record.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+      record.flag_status === constant.FLAG_STATUS_PPIC_REQUEST ||
+      record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+      record.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+      record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+      record.flag_status === constant.FLAG_STATUS_SUPPLIER
     ) {
       setEditing(false);
       Modal.error({
@@ -87,24 +90,41 @@ const EditableCell = ({
       return;
     }
     setEditing(!editing);
-    const fieldValue = record[dataIndex];
-
+    let fieldValue = record[dataIndex];
     const isDateType = moment(fieldValue, "YYYY-MM-DDTHH:mm:ss.SSSZ", true).isValid();
+    const isCurrentCellSupplierName = dataIndex === "supplier_name";
+    if (isCurrentCellSupplierName) {
+      fieldValue = suppliers.find((sup) => sup.value === record.supplier_id).value;
+    }
     if (!editing) {
       // If entering edit mode, store the original date
       if (isDateType) {
         setOriginalDate(fieldValue);
-
         form.setFieldsValue({ [dataIndex]: moment(fieldValue) });
+      } else if (isCurrentCellSupplierName) {
+        setNewSupplier({
+          ref_id: suppliers.find((sup) => sup.value === record.supplier_id).value,
+          name: suppliers.find((sup) => sup.value === record.supplier_id).label,
+        });
+        form.setFieldsValue({
+          supplier_name: fieldValue,
+        });
       } else {
         form.setFieldsValue({ [dataIndex]: fieldValue });
       }
     } else {
       // If canceling edit mode, revert to the original date
-
       if (isDateType) {
         setCurrentDate(originalDate);
         form.setFieldsValue({ [dataIndex]: originalDate });
+      } else if (isCurrentCellSupplierName) {
+        setNewSupplier({
+          ref_id: suppliers.find((sup) => sup.value === record.supplier_id).value,
+          name: suppliers.find((sup) => sup.value === record.supplier_id).label,
+        });
+        form.setFieldsValue({
+          supplier_name: fieldValue,
+        });
       } else {
         form.setFieldsValue({ [dataIndex]: fieldValue });
       }
@@ -116,6 +136,16 @@ const EditableCell = ({
       const values = await form.validateFields();
 
       if (values[dataIndex] === null) {
+      } else if (dataIndex === "supplier_name") {
+        toggleEdit();
+        handleSave({
+          ...record,
+          supplier_id: values.supplier_name,
+          supplier: {
+            ref_id: values.supplier_name,
+            name: suppliers.find((sup) => sup.value === values.supplier_name).label,
+          },
+        });
       } else {
         toggleEdit();
         handleSave({
@@ -123,7 +153,9 @@ const EditableCell = ({
           ...values,
         });
       }
-    } catch (errInfo) {}
+    } catch (errInfo) {
+      console.log(errInfo);
+    }
   };
 
   let childNode = children;
@@ -131,7 +163,7 @@ const EditableCell = ({
     const fieldValue = record[dataIndex];
     // Check if fieldValue is a valid Date
     const isDateType = moment(fieldValue, "YYYY-MM-DDTHH:mm:ss.SSSZ", true).isValid();
-
+    const isCurrentCellSupplierName = dataIndex === "supplier_name";
     childNode = editing ? (
       isDateType ? (
         <Form.Item
@@ -144,6 +176,21 @@ const EditableCell = ({
             allowClear={false}
             inputReadOnly={false}
             {...utils.FORM_DATEPICKER_PROPS}
+            ref={inputRef}
+            onPressEnter={save}
+            onBlur={save}
+          />
+        </Form.Item>
+      ) : isCurrentCellSupplierName ? (
+        <Form.Item name={dataIndex} initialValue={record[dataIndex]} className="mb-2">
+          <Select
+            showSearch
+            placeholder="Select Supplier"
+            optionFilterProp="children"
+            // onChange={onChangeSupplierList}
+            style={{ width: "100%" }}
+            // filterOption={filterOption}
+            options={suppliers}
             ref={inputRef}
             onPressEnter={save}
             onBlur={save}
@@ -196,13 +243,13 @@ const PPICView = (props) => {
   let defaultFilterStatus = null;
   let defaultActiveTab = "all";
   if (userInfo.role.id === 2) {
-    defaultFilterStatus = "A";
+    defaultFilterStatus = constant.FLAG_STATUS_PPIC_INIT;
     defaultActiveTab = defaultFilterStatus;
   } else if (userInfo.role.id === 3) {
-    defaultFilterStatus = "B";
+    defaultFilterStatus = constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC;
     defaultActiveTab = defaultFilterStatus;
   } else if (userInfo.role.id === 4) {
-    defaultFilterStatus = "E";
+    defaultFilterStatus = constant.FLAG_STATUS_SUPPLIER;
     defaultActiveTab = defaultFilterStatus;
   }
   const [expandable, setExpandable] = useState({
@@ -239,7 +286,8 @@ const PPICView = (props) => {
     },
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
-        (record.flag_status === "C" || record.flag_status === "G") &&
+        (record.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+          record.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) &&
         (JSON.parse(record.notes)?.retur_proc_ppic ||
           JSON.parse(record.notes)?.edit_req_sup ||
           JSON.parse(record.notes)?.split_req_sup);
@@ -314,7 +362,29 @@ const PPICView = (props) => {
 
   const rowClassName = (record, index) => {
     const isDeleted = deletedRows.some((deletedRow) => deletedRow?.id === record?.id);
+    const flagStatus = record?.flag_status;
+    const statusEdited = record?.status_edited;
 
+    if (editTableMode && statusEdited) {
+      return "background-color warning-2";
+    }
+    if (
+      (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+        (flagStatus !== constant.FLAG_STATUS_PPIC_INIT &&
+          flagStatus !== constant.FLAG_STATUS_PROCUREMENT_RETUR)) &&
+      editTableMode
+    ) {
+      return "background-color error";
+    }
+    if (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+      return "background-color primary-3";
+    }
+    if (
+      flagStatus !== constant.FLAG_STATUS_PPIC_INIT &&
+      flagStatus !== constant.FLAG_STATUS_PROCUREMENT_RETUR
+    ) {
+      return "background-color warning-2";
+    }
     return isDeleted && filterStatus !== "deleted"
       ? "editable-row fade-out-exiting"
       : "editable-row";
@@ -329,12 +399,12 @@ const PPICView = (props) => {
       const offerData = rsBodyList.offer.filter((offer) => !offer.deleted_at);
       const offerDataCheckList = rsBodyList.offer.filter(
         (item) =>
-          item.flag_status !== "X" &&
-          item.flag_status !== "G" &&
-          item.flag_status !== "B" &&
-          item.flag_status !== "D" &&
-          item.flag_status !== "F" &&
-          item.flag_status !== "E" &&
+          item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+          item.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST &&
+          item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+          item.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT &&
+          item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
           !item.deleted_at,
       );
 
@@ -398,12 +468,12 @@ const PPICView = (props) => {
       const offerData = rsBodyList.offer;
       const offerDataCheckList = rsBodyList.offer.filter(
         (item) =>
-          item.flag_status !== "X" &&
-          item.flag_status !== "G" &&
-          item.flag_status !== "B" &&
-          item.flag_status !== "D" &&
-          item.flag_status !== "F" &&
-          item.flag_status !== "E" &&
+          item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+          item.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST &&
+          item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+          item.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT &&
+          item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
           !item.deleted_at,
       );
 
@@ -461,12 +531,12 @@ const PPICView = (props) => {
           currRow.po_qty === nextRow.po_qty &&
           currRow.flag_status === nextRow.flag_status &&
           currRow.split_from_id === nextRow.split_from_id &&
-          (currRow.flag_status !== "X" ||
-            currRow.flag_status !== "G" ||
-            currRow.flag_status === "B" ||
-            currRow.flag_status === "D" ||
-            currRow.flag_status === "F" ||
-            currRow.flag_status === "E")
+          (currRow.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            currRow.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST ||
+            currRow.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+            currRow.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+            currRow.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            currRow.flag_status === constant.FLAG_STATUS_SUPPLIER)
         );
       }),
     );
@@ -652,24 +722,39 @@ const PPICView = (props) => {
   //   };
   // }, [arrayOfMerge]);
 
+  const areObjectsEqualPartial = (obj1, obj2, keysToCompare) => {
+    for (const key of keysToCompare) {
+      if (obj1[key] !== obj2[key]) {
+        return false;
+      }
+    }
+    return true;
+  };
   const handleDelete = (key) => {
     const newData = dataSource.filter((item) => item.key !== key);
     setDataSource(newData);
   };
   const handleSave = (row) => {
+    const keyToCompare = ["submission_date", "supplier_id", "po_number", "po_qty", "po_outs"];
     const newData = [...dataSource];
+
     const index = newData.findIndex((item) => row.key === item.key);
+
     const item = newData[index];
+   
     newData.splice(index, 1, {
       ...item,
       ...row,
+      status_edited: areObjectsEqualPartial({ ...row }, oldDataSource[index], keyToCompare)
+        ? false
+        : true,
     });
     //check the new data and the old data, if id exist in old, remove old and replace new
     const editedDataIndex = editedData.findIndex((item) => item.id === row.id);
     if (editedDataIndex !== -1) {
       editedData.splice(editedDataIndex, 1);
     }
-
+    console.log(JSON.stringify({ ...row }) === JSON.stringify(oldDataSource[index]));
     setEditedData([...editedData, row]);
     setDataSource(newData);
   };
@@ -687,19 +772,45 @@ const PPICView = (props) => {
   const defaultColumns = [
     {
       title: (_v, record, index) => {
-        if (editTableMode || ["X", "G", "B", "D", "F", "E", "deleted"].includes(filterStatus))
+        if (
+          editTableMode ||
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC,
+            constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
+        )
           return;
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
           switch (filterStatus) {
-            case "A":
-              return !(flagStatus === "X" || flagStatus === "G" || flagStatus === "C");
-            case "C":
-              return !(flagStatus === "X" || flagStatus === "G" || flagStatus === "A");
-            case "G":
-              return !(flagStatus === "X" || flagStatus === "A" || flagStatus === "C");
+            case constant.FLAG_STATUS_PPIC_INIT:
+              return !(
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR
+              );
+            case constant.FLAG_STATUS_PROCUREMENT_RETUR:
+              return !(
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_PPIC_INIT
+              );
+            case constant.FLAG_STATUS_PPIC_REQUEST:
+              return !(
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_INIT ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR
+              );
             default:
-              return !(flagStatus === "X" || flagStatus === "G");
+              return !(
+                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST
+              );
           }
         };
 
@@ -729,26 +840,37 @@ const PPICView = (props) => {
       key: "check",
       render: (_v, record, index) => {
         const flagStatus = record?.flag_status;
-        if (editTableMode || ["X", "G", "B", "D", "F", "E", "deleted"].includes(filterStatus))
+        if (
+          editTableMode ||
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC,
+            constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
+        )
           return;
         if (
           !filterStatus &&
-          (flagStatus === "X" ||
-            flagStatus === "G" ||
-            flagStatus === "B" ||
-            flagStatus === "D" ||
-            flagStatus === "F" ||
-            flagStatus === "E")
+          (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+            flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_SUPPLIER)
         )
           return;
         const isDataComplete = (record) => {
           return (
-            record.flag_status !== "X" ||
-            record.flag_status !== "G" ||
-            record.flag_status !== "B" ||
-            record.flag_status !== "D" ||
-            record.flag_status !== "F" ||
-            record.flag_status !== "E"
+            record.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            record.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST ||
+            record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+            record.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+            record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            record.flag_status !== constant.FLAG_STATUS_SUPPLIER
           );
         };
 
@@ -762,9 +884,7 @@ const PPICView = (props) => {
               onChange={() => {
                 handleCheckboxChange(index, initialChecked);
               }}
-              onClick={() => {
-                console.log(previewRowChecked);
-              }}
+              onClick={() => {}}
             />
           </>
         );
@@ -785,6 +905,7 @@ const PPICView = (props) => {
       title: t("supplierName"),
       dataIndex: "supplier_name",
       key: "supplier_name",
+      editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       render: (_, row) => {
@@ -798,16 +919,16 @@ const PPICView = (props) => {
       editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
-      filteredValue: filteredInfo?.po_number || null,
-      onFilter: (value, record) => {
-        return record.po_number.replace(/^\W*POF/, "").includes(value);
-      }, //filter
-      sorter: (a, b) => {
-        const numericA = parseInt(a.po_number.replace(/^\W*POF/, ""), 10);
-        const numericB = parseInt(b.po_number.replace(/^\W*POF/, ""), 10);
-        return numericA - numericB;
-      },
-      sortOrder: sortedInfo.columnKey === "po_number" ? sortedInfo.order : null,
+      // filteredValue: filteredInfo?.po_number || null,
+      // onFilter: (value, record) => {
+      //   return record.po_number.replace(/^\W*POF/, "").includes(value);
+      // }, //filter
+      // sorter: (a, b) => {
+      //   const numericA = parseInt(a.po_number.replace(/^\W*POF/, ""), 10);
+      //   const numericB = parseInt(b.po_number.replace(/^\W*POF/, ""), 10);
+      //   return numericA - numericB;
+      // },
+      // sortOrder: sortedInfo.columnKey === "po_number" ? sortedInfo.order : null,
       render: (_, row) => {
         if (editTableMode) {
           return row?.po_number || <Tag color="red">Please Fill PO Number</Tag>;
@@ -894,15 +1015,15 @@ const PPICView = (props) => {
       key: "action",
       onCell: (_, index) => {
         if (
-          filterStatus === "A" ||
-          filterStatus === "C" ||
-          filterStatus === "X" ||
+          filterStatus === constant.FLAG_STATUS_PPIC_INIT ||
+          filterStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
           (!filterStatus &&
-            dataSource[index]?.flag_status !== "G" &&
-            dataSource[index]?.flag_status !== "B" &&
-            dataSource[index]?.flag_status !== "D" &&
-            dataSource[index]?.flag_status !== "F" &&
-            dataSource[index]?.flag_status !== "E")
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST &&
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT &&
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+            dataSource[index]?.flag_status !== constant.FLAG_STATUS_SUPPLIER)
         )
           return;
         return { ...getCellConfig(arrayOfMerge, index) };
@@ -958,25 +1079,37 @@ const PPICView = (props) => {
           </div>
         );
         if (row.deleted_at !== null) return renderStatusTag("error", "Deleted");
-        if (row.flag_status === "B" || row.flag_status === "D") {
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+          row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+        ) {
           return renderStatusTag("error", "at Procurement");
         }
-        if (row.flag_status === "E") {
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           return renderStatusTag("error", `at Supplier ${row.supplier.name}`);
         }
-        if (row.flag_status === "F" && row.split_from_id !== null) {
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.split_from_id !== null
+        ) {
           return renderStatusTag("warning", "Split Request (Supplier to Procurement)");
         }
-        if (row.flag_status === "F" && row.edit_from_id !== null) {
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.edit_from_id !== null
+        ) {
           return renderStatusTag("warning", "Edit Request (Supplier to Procurement)");
         }
-        if (row.flag_status === "X") {
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
           return renderStatusTag("success", "Completed");
         }
 
         if (editTableMode) return;
 
-        if (row.flag_status === "A" || row.flag_status === "C") {
+        if (
+          row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
+        ) {
           btnSplit = (
             <Button
               className="mr-1 mb-1"
@@ -1033,7 +1166,7 @@ const PPICView = (props) => {
             </Button>
           );
         }
-        if (row.flag_status === "G") {
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) {
           if (row.split_from_id !== null) {
             tagStatus = <Tag color="warning">Split Request</Tag>;
             btnAcceptSplit = (
@@ -1160,7 +1293,9 @@ const PPICView = (props) => {
         {offers && offers.length > 0 ? (
           <>
             <Space style={{ marginBottom: "1rem" }}>
-              {(!filterStatus || filterStatus === "A" || filterStatus === "C") &&
+              {(!filterStatus ||
+                filterStatus === constant.FLAG_STATUS_PPIC_INIT ||
+                filterStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR) &&
                 !editTableMode && (
                   <>
                     <Button
@@ -1524,7 +1659,7 @@ const PPICView = (props) => {
           </Col>
         </Row>
       </Form>
-      {console.log("previewRowChecked", previewRowChecked)}
+
       <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
         {tabPanes}
       </Tabs>

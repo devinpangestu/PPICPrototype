@@ -15,7 +15,7 @@ import master from "./master";
 import logistic from "./logistic";
 
 import file from "./file";
-
+import config from "./config";
 import ppic from "./ppic";
 import ppicSuppliers from "./ppicSuppliers";
 import purchasing from "./purchasing";
@@ -23,8 +23,8 @@ import suppliers from "./suppliers";
 
 const api = {
   auth: auth,
+  config: config,
   roles: roles,
-
   master: master,
   commodityFee: commodity_fee,
   users: users,

@@ -142,7 +142,7 @@ function ModalEditAndSend(props) {
                                   }}
                                   {...utils.FORM_DATEPICKER_PROPS}
                                   style={{ width: "100%" }}
-                                  disabled={data[key].flag_status !== "E"}
+                                  disabled={data[key].flag_status !== constant.FLAG_STATUS_SUPPLIER}
                                 />
                               </Form.Item>
                             </Col>
@@ -170,8 +170,9 @@ function ModalEditAndSend(props) {
                                   placeholder={`${t("input")} ${t("qtyDelivery")}`}
                                   disabled={
                                     fields.length === 1 ||
-                                    data[key].flag_status === "X" ||
-                                    data[key].flag_status !== "E"
+                                    data[key].flag_status ===
+                                      constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                                    data[key].flag_status !== constant.FLAG_STATUS_SUPPLIER
                                   }
                                 />
                               </Form.Item>

@@ -28,9 +28,8 @@ export default cleanEnv(process.env, {
   NSQ_URL: str(),
   BASE_URL: str(),
   BASE_URL_CLIENT: str(),
-  BE_PM2_NAME: str(),
-  BASE_URL_REDIS: str(),
-  HTTP_PORT: port(),
+  API_PORT: port(),
+  WEB_PORT: port(),
   SESSION_SECRET: str(),
   JWT_SECRET: str(),
 });
