@@ -3,6 +3,7 @@ import { successResponse, errorResponse, uniqueId } from "../helpers/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcrypt";
 import { getUserID } from "../utils/auth.js";
+import { exp } from "mathjs";
 
 export const UserList = async (req, res) => {
   const page_number = Number(req.query.page_number) || 1; // Default to page 1 if not provided
@@ -218,6 +219,49 @@ export const UserResetPwd = async (req, res) => {
       where: { employee_id },
     });
     return successResponse(req, res, "Reset Password Success");
+  } catch (error) {
+    return errorResponse(req, res, error.message);
+  }
+};
+
+export const UserVerifyEmail = async (req, res) => {
+  //TODO FLOW PENDAFTARAN SUPPLIER
+  try {
+    const { token_id, token_frag } = req.params;
+    const checkToken = await db.TOKENS.findOne({
+      where: { id: token_id, token: token_frag, status: "email-verification" },
+    });
+    if (!checkToken) {
+      return errorResponse(req, res, "Invalid Link");
+    }
+    if (checkToken.expired_at < new Date()) {
+      return errorResponse(
+        req,
+        res,
+        "Link expired, please request to PT Bina Karya Prima for new link"
+      );
+    }
+    const suppliersAccountInfo = await db.SUPPLIERS.findOne({
+      where: { ref_id: checkToken.user_id },
+    });
+
+    if (!suppliersAccountInfo) {
+      return errorResponse(req, res, "Supplier Data not found");
+    }
+
+    const password = uniqueId(8);
+    const passwordToHash = await bcrypt.hash(password, 4);
+
+    const payload = {
+      user_id: suppliersAccountInfo.email,
+      role_id: 4,
+      name: suppliersAccountInfo.name,
+      password: passwordToHash,
+      created_at: new Date(),
+      created_by_id: userId,
+      updated_at: new Date(),
+      onesignal_player_id: "[]",
+    };
   } catch (error) {
     return errorResponse(req, res, error.message);
   }

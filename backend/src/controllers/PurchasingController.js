@@ -31,7 +31,7 @@ export const PurchasingScheduleSummary = async (req, res) => {
     };
 
     if (user_id) {
-      whereClause[Op.and].push({ created_by_id: user_id }); //TODO cari user id
+      whereClause[Op.and].push({ created_by_id: user_id });
     }
 
     if (supplier_id) {

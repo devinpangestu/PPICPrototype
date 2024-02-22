@@ -24,6 +24,11 @@ export const useDataStore = create((set) => ({
   setSuppliersSearch: (data) => set({ suppliersSearch: data }),
   usersSearch: [],
   setUsersSearch: (data) => set({ usersSearch: data }),
+  POSearch: null,
+  setPOSearch: (data) => set({ POSearch: data }),
+
+  filterValue: {},
+  setFilterValue: (newFilterValue) => set({ filterValue: newFilterValue }),
 
   editTableMode: false,
   setEditTableMode: (mode) => set({ editTableMode: mode }),

@@ -1,5 +1,5 @@
 import { cleanEnv } from "envalid";
-import { port, str, num } from "envalid/dist/validators.js";
+import { port, str, num, bool } from "envalid/dist/validators.js";
 
 export default cleanEnv(process.env, {
   NODE_MSSQL_USER: str(),
@@ -32,4 +32,10 @@ export default cleanEnv(process.env, {
   WEB_PORT: port(),
   SESSION_SECRET: str(),
   JWT_SECRET: str(),
+  EMAIL_HOST: str(),
+  EMAIL_PORT: port(),
+  EMAIL_SECURE: bool(),
+  EMAIL_USERNAME: str(),
+  EMAIL_PASSWORD: str(),
+  EMAIL_CIPHERS: str(),
 });

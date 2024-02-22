@@ -1,6 +1,6 @@
 import express from "express";
 import * as PPICController from "../../controllers/PPICController.js";
-import {verifyTokenAndRole} from "../../middlewares/auth.js";
+import { verifyTokenAndRole } from "../../middlewares/auth.js";
 const router = express.Router();
 
 router.get(
@@ -29,6 +29,11 @@ router.put(
   PPICController.PPICScheduleEdit
 );
 router.put(
+  "/refresh-outs",
+  verifyTokenAndRole("ppic@edit"),
+  PPICController.PPICScheduleRefreshPOOuts
+);
+router.put(
   "/sendt-purchasing",
   verifyTokenAndRole("ppic@edit"),
   PPICController.PPICScheduleSendToPurchasing
@@ -53,6 +58,11 @@ router.put(
   "/reject-edit",
   verifyTokenAndRole("ppic@edit"),
   PPICController.PPICScheduleRejectEditSupplier
+);
+router.get(
+  "/po-details",
+  verifyTokenAndRole("ppic@view"),
+  PPICController.PPICScheduleGetPODetails
 );
 router.get(
   "/:id",

@@ -1,7 +1,7 @@
 import React, { useMemo, useContext, useEffect, useRef, useState } from "react";
 import { withRouter } from "react-router-dom";
 import { PageContainer } from "components/layout";
-import { TableNotFoundNotice, SyncOverlay } from "components";
+import { TableNotFoundNotice, SyncOverlay, SectionHeading } from "components";
 import { usePageStore } from "state/pageState";
 import {
   Row,
@@ -19,6 +19,7 @@ import {
   Table,
   Tag,
   Input,
+  Card,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -164,6 +165,9 @@ const EditableCell = ({
     // Check if fieldValue is a valid Date
     const isDateType = moment(fieldValue, "YYYY-MM-DDTHH:mm:ss.SSSZ", true).isValid();
     const isCurrentCellSupplierName = dataIndex === "supplier_name";
+    const filterOption = (input, option) =>
+      (option?.label ?? "").toLowerCase().includes(input.toLowerCase());
+
     childNode = editing ? (
       isDateType ? (
         <Form.Item
@@ -189,7 +193,7 @@ const EditableCell = ({
             optionFilterProp="children"
             // onChange={onChangeSupplierList}
             style={{ width: "100%" }}
-            // filterOption={filterOption}
+            filterOption={filterOption}
             options={suppliers}
             ref={inputRef}
             onPressEnter={save}
@@ -334,6 +338,10 @@ const PPICView = (props) => {
     setSuppliersSearch,
     usersSearch,
     setUsersSearch,
+    POSearch,
+    setPOSearch,
+    filterValue,
+    setFilterValue,
     editTableMode,
     setEditTableMode,
     search,
@@ -559,47 +567,53 @@ const PPICView = (props) => {
       setPreviewRowChecked(updatedPreviewRowChecked);
     }
   };
-  const onChangeSupplierList = async (value) => {
-    let errMsg;
+  // const onChangeSupplierList = async (value) => {
+  //   let errMsg;
 
-    setSuppliersSearch(value);
-    const otherParams = {
-      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-      supplier_id: value ?? null,
-      user_id: usersSearch ?? null,
-      status: filterStatus,
-    };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
-  };
+  //   setSuppliersSearch(value);
+  //   const otherParams = {
+  //     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+  //     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+  //     supplier_id: value ?? null,
+  //     user_id: usersSearch ?? null,
+  //     status: filterStatus,
+  //   };
+  //   fetchData(otherParams);
+  //   fetchSummary(otherParams);
+  // };
 
-  const onChangeUserList = async (value) => {
-    let errMsg;
+  // const onChangeUserList = async (value) => {
+  //   let errMsg;
 
-    setUsersSearch(value);
-    const otherParams = {
-      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-      supplier_id: suppliersSearch ?? null,
-      user_id: value ?? null,
-      status: filterStatus,
-    };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
-  };
+  //   setUsersSearch(value);
+  //   const otherParams = {
+  //     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+  //     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+  //     supplier_id: suppliersSearch ?? null,
+  //     user_id: value ?? null,
+  //     status: filterStatus,
+  //   };
+  //   fetchData(otherParams);
+  //   fetchSummary(otherParams);
+  // };
 
   const onResetFilter = async () => {
     setPageLoading(true);
     setUsersSearch(null);
     setSuppliersSearch(null);
-    form.setFieldsValue({ user_list: null, supplier_list: null });
+    setFilterValue({
+      supplier_id: null,
+      user_id: null,
+      search_PO: null,
+    });
+    form.setFieldsValue({ user_list: null, supplier_list: null, search_PO: null });
     const otherParams = {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
       supplier_id: null,
       user_id: null,
-      status: filterStatus,
+      search_PO: null,
+      status: null,
     };
     fetchData(otherParams);
     fetchSummary(otherParams);
@@ -617,6 +631,7 @@ const PPICView = (props) => {
           supplier_id: suppliersSearch ?? null,
           user_id: usersSearch ?? null,
           status: filterStatus,
+          search_PO: filterValue?.search_PO,
         };
         fetchSummary(otherParams);
       })
@@ -628,19 +643,13 @@ const PPICView = (props) => {
       });
     loadSuppliersOption();
     authorizationCheck(userInfo);
-    return () => {
-      setFilterStatus(null);
-      setOffers([]);
-      setDataSource([]);
-    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (minDateLoaded) {
       loadOffers();
     }
-  }, [minDateLoaded, filterStatus, pageNumber, dateRange, search]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  }, [minDateLoaded, filterStatus, pageNumber, dateRange, search, filterValue, filteredInfo]); // eslint-disable-line react-hooks/exhaustive-deps
   //when offers change load the user that responsible for making notes
 
   const loadOffers = async () => {
@@ -650,14 +659,16 @@ const PPICView = (props) => {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
     };
-    if (filterStatus) otherParams.status = filterStatus;
-    if (suppliersSearch) otherParams.supplier_id = suppliersSearch;
-    if (usersSearch) otherParams.user_id = usersSearch;
-    if (search) otherParams.search = search;
 
     if (filterStatus !== "deleted") {
+      if (filterStatus) otherParams.status = filterStatus;
+      if (filterValue.supplier_id) otherParams.supplier_id = filterValue.supplier_id;
+      if (filterValue.user_id) otherParams.user_id = filterValue.user_id;
+      if (filterValue.search_PO) otherParams.searchPO = filterValue.search_PO;
+      if (search) otherParams.search = search;
       await fetchData(otherParams);
     } else {
+      if (filterStatus) otherParams.status = filterStatus;
       await fetchDeletedData(otherParams);
     }
     if (errMsg) {
@@ -741,7 +752,7 @@ const PPICView = (props) => {
     const index = newData.findIndex((item) => row.key === item.key);
 
     const item = newData[index];
-   
+
     newData.splice(index, 1, {
       ...item,
       ...row,
@@ -769,6 +780,33 @@ const PPICView = (props) => {
       cell: EditableCell,
     },
   };
+
+  const filterColumnOpt = (dataIndex) => {
+    return [
+      ...new Set(
+        offers.map((item) => {
+          if (dataIndex !== "supplier_name") {
+            return item[dataIndex];
+          } else {
+            return item.supplier.name;
+          }
+        }),
+      ),
+    ].map((value) => {
+      if (dataIndex !== "supplier_name") {
+        return {
+          text: value,
+          value,
+        };
+      } else {
+        return {
+          text: suppliers.find((sup) => sup.label === value).label,
+          value: suppliers.find((sup) => sup.label === value).label,
+        };
+      }
+    });
+  };
+
   const defaultColumns = [
     {
       title: (_v, record, index) => {
@@ -895,6 +933,9 @@ const PPICView = (props) => {
       dataIndex: "submission_date",
       key: "submission_date",
       editable: editTableMode,
+      sorter: (a, b) => {
+        return moment(a.submission_date) - moment(b.submission_date);
+      },
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       render: (_, row) => {
@@ -907,7 +948,13 @@ const PPICView = (props) => {
       key: "supplier_name",
       editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      filters: filterColumnOpt("supplier_name"),
+      filteredValue: filteredInfo?.supplier_name || null,
+      onFilter: (value, record) => {
+        return record?.supplier?.name.includes(value);
+      },
 
+      filterSearch: true,
       render: (_, row) => {
         return row?.supplier?.name;
       },
@@ -919,16 +966,11 @@ const PPICView = (props) => {
       editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
-      // filteredValue: filteredInfo?.po_number || null,
-      // onFilter: (value, record) => {
-      //   return record.po_number.replace(/^\W*POF/, "").includes(value);
-      // }, //filter
-      // sorter: (a, b) => {
-      //   const numericA = parseInt(a.po_number.replace(/^\W*POF/, ""), 10);
-      //   const numericB = parseInt(b.po_number.replace(/^\W*POF/, ""), 10);
-      //   return numericA - numericB;
-      // },
-      // sortOrder: sortedInfo.columnKey === "po_number" ? sortedInfo.order : null,
+      filters: filterColumnOpt("po_number"),
+      filteredValue: filteredInfo.po_number || null,
+      onFilter: (value, record) => record?.po_number.includes(value),
+
+      filterSearch: true,
       render: (_, row) => {
         if (editTableMode) {
           return row?.po_number || <Tag color="red">Please Fill PO Number</Tag>;
@@ -952,6 +994,7 @@ const PPICView = (props) => {
       dataIndex: "po_outs",
       key: "po_outs",
       editable: editTableMode,
+      sorter: (a, b) => a.po_outs - b.po_outs,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       render: (_, row) => {
@@ -963,6 +1006,11 @@ const PPICView = (props) => {
       dataIndex: "sku_code",
       key: "sku_code",
       editable: editTableMode,
+      filters: filterColumnOpt("sku_code"),
+      filteredValue: filteredInfo.sku_code || null,
+      onFilter: (value, record) => record?.sku_code.includes(value),
+
+      filterSearch: true,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
@@ -970,6 +1018,11 @@ const PPICView = (props) => {
       dataIndex: "sku_name",
       key: "sku_name",
       editable: editTableMode,
+      filters: filterColumnOpt("sku_name"),
+      filteredValue: filteredInfo.sku_name || null,
+      onFilter: (value, record) => record?.sku_name.includes(value),
+
+      filterSearch: true,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
@@ -986,6 +1039,9 @@ const PPICView = (props) => {
       dataIndex: "est_delivery",
       key: "est_delivery",
       editable: editTableMode,
+      sorter: (a, b) => {
+        return moment(a.est_delivery) - moment(b.est_delivery);
+      },
       render: (_, row) => {
         return moment(row?.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
       },
@@ -1002,6 +1058,9 @@ const PPICView = (props) => {
       title: t("supplierDate"),
       dataIndex: "est_submitted_date",
       key: "est_submitted_date",
+      sorter: (a, b) => {
+        return moment(a.est_submitted_date) - moment(b.est_submitted_date);
+      },
       render: (_, row) => {
         return row?.est_submitted_date
           ? moment(row?.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
@@ -1059,6 +1118,7 @@ const PPICView = (props) => {
                     supplier_id: suppliersSearch ?? null,
                     user_id: usersSearch ?? null,
                     status: filterStatus,
+                    search_PO: filterValue?.search_PO,
                   };
                   fetchSummary(otherParams);
                 });
@@ -1155,6 +1215,7 @@ const PPICView = (props) => {
                           supplier_id: suppliersSearch ?? null,
                           user_id: usersSearch ?? null,
                           status: filterStatus,
+                          search_PO: filterValue?.search_PO,
                         };
                         fetchSummary(otherParams);
                       });
@@ -1276,13 +1337,25 @@ const PPICView = (props) => {
   });
 
   const onSearch = (values) => {
-    if (values) {
-      if (values.search === "") {
-        setSearch(null);
-      } else {
-        setSearch(values.search);
-      }
+    if (!values) {
+      return;
     }
+    let newFilterValue = {};
+    if (values.supplier_list) {
+      newFilterValue.supplier_id = values.supplier_list;
+    }
+    if (values.user_list) {
+      newFilterValue.user_id = values.user_list;
+    }
+    if (values.search_PO) {
+      newFilterValue.search_PO = values.search_PO;
+    }
+    setFilterValue(newFilterValue);
+    fetchSummary({
+      ...newFilterValue,
+      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+    });
   };
 
   const renderTable = () => {
@@ -1335,6 +1408,7 @@ const PPICView = (props) => {
                                     supplier_id: suppliersSearch ?? null,
                                     user_id: usersSearch ?? null,
                                     status: filterStatus,
+                                    search_PO: filterValue?.search_PO,
                                   };
                                   fetchSummary(otherParams);
                                 });
@@ -1355,6 +1429,47 @@ const PPICView = (props) => {
                       }}
                     >
                       Change to Edit Mode
+                    </Button>
+                    <Button
+                      type="primary"
+                      onClick={() => {
+                        Modal.confirm({
+                          ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
+                          content: `Refresh Outstanding PO from ${moment(dateRange[0]).format(
+                            constant.FORMAT_DISPLAY_DATE,
+                          )} to ${moment(dateRange[1]).format(constant.FORMAT_DISPLAY_DATE)}?`,
+                          onOk: () => {
+                            setPageLoading(true);
+                            const params = {
+                              from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+                              to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+                            };
+                            api.ppic
+                              .refreshPOOuts(params)
+                              .then((res) => {
+                                message.success("Success");
+                              })
+                              .catch((err) => {
+                                utils.swal.Error({ msg: utils.getErrMsg(err) });
+                              })
+                              .finally(() => {
+                                setPageLoading(false);
+                                loadOffers();
+                                const otherParams = {
+                                  from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+                                  to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+                                  supplier_id: suppliersSearch ?? null,
+                                  user_id: usersSearch ?? null,
+                                  status: filterStatus,
+                                  search_PO: filterValue?.search_PO,
+                                };
+                                fetchSummary(otherParams);
+                              });
+                          },
+                        });
+                      }}
+                    >
+                      Refresh Outstanding PO
                     </Button>
                   </>
                 )}
@@ -1542,6 +1657,7 @@ const PPICView = (props) => {
             supplier_id: suppliersSearch ?? null,
             user_id: usersSearch ?? null,
             status: filterStatus,
+            search_PO: filterValue?.search_PO,
           };
           fetchSummary(otherParams);
         }}
@@ -1561,6 +1677,7 @@ const PPICView = (props) => {
             supplier_id: suppliersSearch ?? null,
             user_id: usersSearch ?? null,
             status: filterStatus,
+            search_PO: filterValue?.search_PO,
           };
           fetchSummary(otherParams);
         }}
@@ -1581,6 +1698,7 @@ const PPICView = (props) => {
             supplier_id: suppliersSearch ?? null,
             user_id: usersSearch ?? null,
             status: filterStatus,
+            search_PO: filterValue?.search_PO,
           };
           fetchSummary(otherParams);
         }}
@@ -1600,6 +1718,7 @@ const PPICView = (props) => {
             supplier_id: suppliersSearch ?? null,
             user_id: usersSearch ?? null,
             status: filterStatus,
+            search_PO: filterValue?.search_PO,
           };
           fetchSummary(otherParams);
         }}
@@ -1607,62 +1726,93 @@ const PPICView = (props) => {
       />
 
       <SyncOverlay loading={pageLoading} />
-      <Form className="mb-2 w-100" form={form} onFinish={onSearch}>
-        <Row gutter={12}>
-          <Col xs={24} lg={9} xl={7}>
-            <Form.Item className="mb-2" name="date" wrapperCol={{ flex: "auto" }}>
-              <DatePicker.RangePicker
-                defaultValue={dateRange}
-                value={dateRange}
-                style={{ width: "100%" }}
-                {...utils.FORM_RANGEPICKER_PROPS}
-                onChange={(dates, dateStrings) => {
-                  setDateRange(dates);
-                }}
-                allowClear={false}
-              />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} lg={12} xl={4}>
-            <Form.Item name="supplier_list" className="mb-2">
-              <Select
-                showSearch
-                placeholder="Select Supplier"
-                optionFilterProp="children"
-                onChange={onChangeSupplierList}
-                style={{ width: "100%" }}
-                filterOption={filterOption}
-                options={suppliers}
-                defaultValue={null}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12} xl={4}>
-            <Form.Item name="user_list" className="mb-2">
-              <Select
-                showSearch
-                placeholder="Select User"
-                optionFilterProp="children"
-                onChange={onChangeUserList}
-                style={{ width: "100%" }}
-                filterOption={filterOption}
-                options={PPICs}
-                defaultValue={userInfo.user_name}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12} xl={4}>
-            <Button type="primary" onClick={onResetFilter}>
-              Reset Filter
-            </Button>
-          </Col>
-        </Row>
-      </Form>
-
-      <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
-        {tabPanes}
-      </Tabs>
+      <Row gutter={16}>
+        <Col xs={24} lg={24} xl={24}>
+          <Card size="small">
+            <SectionHeading title={"Filter"} withDivider />
+            <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Form.Item
+                    label="Date Range"
+                    className="mb-2"
+                    name="date"
+                    wrapperCol={{ flex: "auto" }}
+                  >
+                    <DatePicker.RangePicker
+                      defaultValue={dateRange}
+                      value={dateRange}
+                      style={{ width: "100%" }}
+                      {...utils.FORM_RANGEPICKER_PROPS}
+                      onChange={(dates, dateStrings) => {
+                        setDateRange(dates);
+                        const otherParams = {
+                          from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
+                          to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
+                          supplier_id: suppliersSearch ?? null,
+                          user_id: usersSearch ?? null,
+                          status: filterStatus,
+                          search_PO: filterValue?.search_PO,
+                        };
+                        fetchSummary(otherParams);
+                      }}
+                      allowClear={false}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="User" name="user_list" className="mb-2">
+                    <Select
+                      showSearch
+                      placeholder="Select User"
+                      optionFilterProp="children"
+                      // onChange={onChangeUserList}
+                      style={{ width: "100%" }}
+                      filterOption={filterOption}
+                      options={PPICs}
+                      defaultValue={userInfo.user_name}
+                    />
+                  </Form.Item>
+                </Col>
+                {/* <Col span={12}>
+                  <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">
+                    <Input placeholder={t("searchPO")} />
+                  </Form.Item>
+                </Col> */}
+              </Row>
+              <Row gutter={8}>
+                {/* <Col span={12}>
+                  <Form.Item label="Supplier" name="supplier_list" className="mb-2">
+                    <Select
+                      showSearch
+                      placeholder="Select Supplier"
+                      optionFilterProp="children"
+                      // onChange={onChangeSupplierList}
+                      style={{ width: "100%" }}
+                      filterOption={filterOption}
+                      options={suppliers}
+                      defaultValue={null}
+                    />
+                  </Form.Item>
+                </Col> */}
+              </Row>
+              <Form.Item className="mb-2">
+                <Button type="primary" htmlType="submit">
+                  {t("applyFilter")}
+                </Button>{" "}
+                <Button type="" onClick={onResetFilter}>
+                  Reset Filter
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
+        </Col>
+        <Col xs={24} lg={24} xl={24}>
+          <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
+            {tabPanes}
+          </Tabs>
+        </Col>
+      </Row>
     </PageContainer>
   );
 };

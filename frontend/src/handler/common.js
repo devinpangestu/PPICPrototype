@@ -274,6 +274,30 @@ export const getPPICUserOptionList = (setPageLoading, setUsers) => {
     });
 };
 
+export const getPurchasingOptionList = (setPageLoading, setUsers) => {
+  setPageLoading(true);
+  api.users
+    .list("", 1000, 1, true)
+    .then(function (response) {
+      const rsBody = response.data.rs_body;
+      let users = [{ value: null, label: "All" }];
+      if (rsBody.users) {
+        rsBody.users.forEach((el) => {
+          console.log(el);
+          users.push({ value: el.id, label: el.name });
+        });
+      }
+      console.log(rsBody);
+      setUsers(users);
+    })
+    .catch(function (error) {
+      utils.swal.Error({ msg: utils.getErrMsg(error) });
+    })
+    .finally(function () {
+      setPageLoading(false);
+    });
+};
+
 export const getPPICs = (setPageLoading, setPPICs) => {
   setPageLoading(true);
   const ppic_super_user = constant.ROLE_SUPER_ADMIN;
@@ -288,6 +312,29 @@ export const getPPICs = (setPageLoading, setPPICs) => {
         users.push({ value: el.id, label: el.name });
       });
       setPPICs(users);
+    })
+    .catch(function (error) {
+      utils.swal.Error({ msg: utils.getErrMsg(error) });
+    })
+    .finally(function () {
+      setPageLoading(false);
+    });
+};
+export const getPurchasing = (setPageLoading, setPurchasing) => {
+  setPageLoading(true);
+  const purchasing_super_user = constant.ROLE_SUPER_ADMIN;
+  const purchasing_main = constant.ROLE_PURCHASING;
+  const purchasing_ids = [purchasing_super_user, purchasing_main];
+  api.users
+    .list("", 1000, 1, purchasing_ids)
+    .then(function (response) {
+      const rsBody = response.data.rs_body;
+      let users = [{ value: null, label: "All" }];
+      rsBody.users.forEach((el) => {
+        users.push({ value: el.id, label: el.name });
+      });
+      console.log(users);
+      setPurchasing(users);
     })
     .catch(function (error) {
       utils.swal.Error({ msg: utils.getErrMsg(error) });

@@ -73,6 +73,7 @@ export const id = {
     status: "Status",
     dealer: "Dealer",
     dealerNotes: "Catatan dealer",
+    autoFill: "Isi Otomatis",
     isRecommended: "Recommended",
     analyst: "Analis",
     analystNotes: "Catatan analis",

@@ -24,6 +24,13 @@ module.exports = {
           defaultValue: null,
           type: Sequelize.STRING,
         },
+        line_num: {
+          defaultValue: null,
+          type: Sequelize.NUMERIC,
+          validate: {
+            isInt: true,
+          },
+        },
         po_qty: {
           defaultValue: null,
           type: Sequelize.NUMERIC,

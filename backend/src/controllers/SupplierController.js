@@ -28,7 +28,7 @@ export const SupplierScheduleList = async (req, res) => {
     };
     if (supplierId) {
       whereClause[Op.and].push({ supplier_id: supplierId });
-    } //TODO: ADD THIS AFTER COMPLETE
+    } 
 
     const data = await db.OFFERS.findAndCountAll({
       include: [
@@ -194,7 +194,7 @@ export const SupplierScheduleGetPOQtyAndDate = async (req, res) => {
     return errorResponse(req, res, error.message);
   }
 };
-//TODO : ADD THIS AFTER COMPLETE
+
 export const SupplierScheduleEdit = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {

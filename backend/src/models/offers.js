@@ -62,6 +62,13 @@ export default (sequelize, DataTypes) => {
         defaultValue: null,
         type: DataTypes.STRING,
       },
+      line_num: {
+        defaultValue: null,
+        type: DataTypes.NUMERIC,
+        validate: {
+          isInt: true,
+        },
+      },
       po_qty: {
         defaultValue: null,
         type: DataTypes.NUMERIC,

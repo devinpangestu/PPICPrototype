@@ -289,8 +289,8 @@ const PurchasingView = (props) => {
     setDateRange,
     suppliers,
     setSuppliers,
-    PPICs,
-    setPPICs,
+    purchasing,
+    setPurchasing,
     filterStatus,
     setFilterStatus,
     pageNumber,
@@ -380,9 +380,9 @@ const PurchasingView = (props) => {
     setFilteredInfo(filters);
     setSortedInfo(sorter);
   };
-  const loadSuppliersOption = () => {
-    handler.getSuppliersOptionList(setPageLoading, setSuppliers);
-    handler.getPPICs(setPageLoading, setPPICs);
+  const loadSuppliersOption = async () => {
+    await handler.getSuppliersOptionList(setPageLoading, setSuppliers);
+    await handler.getPurchasing(setPageLoading, setPurchasing);
   };
   const filterOption = (input, option) =>
     (option?.label ?? "").toLowerCase().includes(input.toLowerCase());
@@ -1345,7 +1345,7 @@ const PurchasingView = (props) => {
                 onChange={onChangeUserList}
                 style={{ width: "100%" }}
                 filterOption={filterOption}
-                options={PPICs}
+                options={purchasing}
                 defaultValue={userInfo.user_name}
               />
             </Form.Item>

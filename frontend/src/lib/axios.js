@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import constant from "constant";
 import errors from "errors";
 import utils from "utils";
-import { VITE_API_TIMEOUT } from "../../public/config";
+import { VITE_API_TIMEOUT } from "../../public/configuration";
 
 // for multiple requests
 let isRefreshing = false;

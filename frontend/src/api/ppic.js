@@ -56,6 +56,13 @@ const ppic = {
       url: `/ppic/${id}`,
     });
   },
+  getPODetail: (params) => {
+    return axios({
+      method: "get",
+      url: `/ppic/po-details`,
+      params,
+    });
+  },
   edit: (data) => {
     return axios({
       method: "put",
@@ -70,6 +77,13 @@ const ppic = {
       headers: {
         "X-CSRF-Token": csrfToken,
       },
+    });
+  },
+  refreshPOOuts: (params) => {
+    return axios({
+      method: "put",
+      url: `/ppic/refresh-outs`,
+      params,
     });
   },
   sendToPurchasing: (data, isMass) => {

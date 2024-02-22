@@ -452,7 +452,7 @@ const SupplierView = (props) => {
               className="mr-1 mb-1"
               size="small"
               onClick={() => {
-                //TODO add api to get PO data and send to ModalEditAndSend
+                
                 setPageLoading(true);
                 api.suppliers
                   .getAllPODetails(row.po_number, row.sku_code)
@@ -568,7 +568,7 @@ const SupplierView = (props) => {
                       setPageLoading(true);
                       const data = offers.filter((offer, index) => previewRowChecked[index]);
                       api.suppliers
-                        .confirmSelected(data) //TODO ganti dengan api.suppliers.sendToSupplier
+                        .confirmSelected(data) 
                         .then((res) => {
                           message.success("Success");
                         })

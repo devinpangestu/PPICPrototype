@@ -52,7 +52,7 @@ const Transaction = (props) => {
   const [suppliersOptionList, setSuppliersOptionList] = useState([]);
 
   const [filterValue, setFilterValue] = useState({
-    from_date: moment().startOf("month").format(constant.FORMAT_API_DATE),
+    from_date: moment().subtract(6, "months").startOf("month").format(constant.FORMAT_API_DATE),
     to_date: moment().format(constant.FORMAT_API_DATE),
   });
   // filter
@@ -85,8 +85,6 @@ const Transaction = (props) => {
         moment(filterValue.to_date, constant.FORMAT_API_DATE),
       ],
     });
-
-    // handler.getWarehouses(setPageLoading, setWarehouses);
   }, []);
 
   useEffect(() => {
@@ -163,7 +161,6 @@ const Transaction = (props) => {
         setSelectedPOData([]);
         setSelectedPOData(rsBody.transactions);
         setSKULists(rsBody.transactions);
-     
       })
       .catch(function (error) {
         utils.swal.Error({ msg: utils.getErrMsg(error) });
@@ -306,7 +303,6 @@ const Transaction = (props) => {
     };
     if (selectedPOData && selectedPOData.length > 0) {
       const items = selectedPOData.map((POData, index) => {
-     
         return {
           key: index,
           label: `(${POData.sku_code} - ${POData.sku_name})  ${POData.offer_count} Schedule`,

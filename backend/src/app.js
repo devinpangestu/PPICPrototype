@@ -22,14 +22,19 @@ import userRoutes from "./routes/v1/user.js";
 import bodyParser from "body-parser";
 
 import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 import "./config/sequelize.js";
 
 import { errorResponse } from "./helpers/index.js";
 import { userIsAuthenticated, verifyTokenAndRole } from "./middlewares/auth.js";
 import {
+  dailyJobScheduleCheckTodayDeliveryDateAndOutstanding,
   dailyJobSupplierRefreshSupplier,
   dailyJobSupplierValidityCheck,
+  dailyJobUpdatePOOutstanding,
 } from "./middlewares/cronjobs.js";
 
 const app = express();
@@ -91,8 +96,11 @@ app.use(express.json());
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-app.use(express.static("public"));
+console.log("dirname", __dirname);
+app.use(express.static(path.join(__dirname, "public")));
 app.use(cookieParser());
 
 app.get(`${currVer}`, async (req, res) => {
@@ -123,11 +131,7 @@ app.use(`${currVer}/roles`, userIsAuthenticated(), roleRoutes);
 app.use(`${currVer}`, userIsAuthenticated(), permissionRoutes);
 app.use(`${currVer}/users`, userIsAuthenticated(), userRoutes);
 app.use(`${currVer}/transactions`, userIsAuthenticated(), transactionRoutes);
-app.use(
-  `${currVer}/ppic/suppliers`,
-
-  ppicSupplierRoutes
-);
+app.use(`${currVer}/ppic/suppliers`, ppicSupplierRoutes);
 app.use(`${currVer}/ppic`, verifyTokenAndRole("ppic@view"), ppicRoutes);
 app.use(
   `${currVer}/suppliers`,
@@ -146,5 +150,6 @@ app.use((req, res, next) => {
 
 dailyJobSupplierValidityCheck();
 dailyJobSupplierRefreshSupplier();
-
+dailyJobScheduleCheckTodayDeliveryDateAndOutstanding();
+dailyJobUpdatePOOutstanding();
 export default app;

@@ -5,7 +5,7 @@ import {
   errorResponseUnauthorized,
   uniqueId,
 } from "../helpers/index.js";
-import { Op, Sequelize, literal } from "sequelize";
+import { Op, Sequelize, literal, QueryTypes } from "sequelize";
 import { getUserID } from "../utils/auth.js";
 import {
   parsingDateToString,
@@ -17,10 +17,12 @@ import {
   filterDeletedDoubleFindCount,
   filterDoubleFindCount,
 } from "../utils/filter.js";
+import { row } from "mathjs";
 
 export const PPICScheduleSummary = async (req, res) => {
   try {
-    const { from_date, to_date, user_id, supplier_id, status } = req.query;
+    const { from_date, to_date, user_id, supplier_id, search_PO, status } =
+      req.query;
     const userId = getUserID(req);
     if (!userId) {
       return errorResponse(
@@ -53,12 +55,18 @@ export const PPICScheduleSummary = async (req, res) => {
 
     if (user_id) {
       whereClauseDeleted[Op.and].push({ created_by_id: user_id });
-      whereClause[Op.and].push({ created_by_id: user_id }); //TODO cari user id
+      whereClause[Op.and].push({ created_by_id: user_id });
     }
 
     if (supplier_id) {
       whereClauseDeleted[Op.and].push({ supplier_id: supplier_id });
       whereClause[Op.and].push({ supplier_id: supplier_id });
+    }
+    if (search_PO) {
+      whereClauseDeleted[Op.and].push({
+        po_number: { [Op.like]: `%${search_PO}%` },
+      });
+      whereClause[Op.and].push({ po_number: { [Op.like]: `%${search_PO}%` } });
     }
     if (from_date && to_date) {
       whereClause[Op.and].push({
@@ -103,7 +111,8 @@ export const PPICScheduleSummary = async (req, res) => {
 };
 
 export const PPICScheduleList = async (req, res) => {
-  const { from_date, to_date, status, supplier_id, user_id } = req.query;
+  const { from_date, to_date, status, supplier_id, user_id, searchPO } =
+    req.query;
   try {
     const customOrder = (column, values, direction) => {
       let orderByClause = "CASE ";
@@ -151,7 +160,10 @@ export const PPICScheduleList = async (req, res) => {
     }
     if (user_id) {
       whereClause[Op.and].push({ created_by_id: user_id });
-    } //TODO mungkin berubah
+    }
+    if (searchPO) {
+      whereClause[Op.and].push({ po_number: { [Op.like]: `%${searchPO}%` } });
+    }
     const data = await db.OFFERS.findAndCountAll({
       include: [
         {
@@ -233,6 +245,7 @@ export const PPICScheduleCreate = async (req, res) => {
       sku_name,
       qty_delivery,
       est_delivery,
+      auto_fill,
       mass,
     } = req.body.rq_body;
     const isMass = req.query.mass;
@@ -245,7 +258,6 @@ export const PPICScheduleCreate = async (req, res) => {
       );
     }
     //check if id ship is exist
-
     if (isMass) {
       for (let key in mass) {
         let rowToInsert = mass[key];
@@ -289,12 +301,63 @@ export const PPICScheduleCreate = async (req, res) => {
         const checkIfDataExist = await db.OFFERS.findOne({
           where: payloadToCheck,
         });
-
         if (checkIfDataExist) {
           return errorResponse(
             req,
             res,
             "Ada data duplikat, mohon cek kembali"
+          );
+        }
+        if (rowToInsert.po_outs > rowToInsert.po_qty) {
+          return errorResponse(
+            req,
+            res,
+            `Outstanding quantity tidak bisa lebih besar dari quantity PO untuk PO ${rowToInsert.po_number} dan barang ${rowToInsert.sku_name}, mohon cek kembali`
+          );
+        }
+        if (rowToInsert.po_number === "") {
+          continue;
+        } else {
+          const [err, result] = await OpenQueryPOOuts(
+            rowToInsert.po_number,
+            rowToInsert.sku_code,
+            dbTransaction
+          );
+          if (!err) {
+            return errorResponse(req, res, "Gagal mencari data PO Outstanding");
+          }
+          if (!result[0].QUANTITY_OUTSTANDING) {
+            continue;
+          } else if (rowToInsert.po_outs > result[0].QUANTITY_OUTSTANDING) {
+            return errorResponse(
+              req,
+              res,
+              `Outstanding quantity tidak cocok dengan data outstanding quantity Oracle untuk PO ${rowToInsert.po_number} dan barang ${rowToInsert.sku_name}, mohon cek kembali`
+            );
+          }
+          console.log(result);
+        }
+
+        const [err, result] = await OpenQueryGetLineNum(
+          rowToInsert.po_number,
+          rowToInsert.sku_code
+        );
+        if (!err) {
+          return errorResponse(req, res, "Gagal mendapatkan data line number");
+        }
+        if (result.length === 0) {
+          return errorResponse(
+            req,
+            res,
+            `Data PO ${rowToInsert.po_number} dan barang ${rowToInsert.sku_name} tidak ditemukan`
+          );
+        }
+
+        if (rowToInsert.qty_delivery > rowToInsert.po_outs) {
+          return errorResponse(
+            req,
+            res,
+            `Jumlah quantity pengiriman melebihi quantity outstanding, mohon cek kembali`
           );
         }
 
@@ -313,6 +376,7 @@ export const PPICScheduleCreate = async (req, res) => {
             updated_by_id: userId,
             created_at: new Date(),
             updated_at: new Date(),
+            line_num: result[0].line_number,
           },
           { dbTransaction }
         );
@@ -320,41 +384,129 @@ export const PPICScheduleCreate = async (req, res) => {
       return successResponse(req, res, "Success Import Data Jadwal Pengiriman");
     } else {
       //check if name is exist
-      const checkIfDataExist = await db.OFFERS.findOne({
-        where: {
-          submission_date,
-          supplier_id: supplier_name, //dicari dulu id nya sesuai
-          po_number,
-          po_qty,
-          po_outs,
-          sku_code,
-          sku_name,
-          qty_delivery,
-          est_delivery,
-        },
-      });
+      if (auto_fill) {
+        const supplier = await db.SUPPLIERS.findOne({
+          where: { name: supplier_name },
+        });
+        const checkIfDataExist = await db.OFFERS.findOne({
+          where: {
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            sku_code,
+            est_delivery: {
+              [Op.between]: [
+                parsingStringToDateEarly(est_delivery),
+                parsingStringToDateLate(est_delivery),
+              ],
+            },
+          },
+        });
 
-      if (checkIfDataExist) {
-        return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
-      }
-      await db.OFFERS.create(
-        {
-          submission_date,
-          supplier_id: supplier_name, //dicari dulu id nya sesuai
+        if (checkIfDataExist) {
+          return errorResponse(
+            req,
+            res,
+            "Ada data duplikat, mohon cek kembali"
+          );
+        }
+        if (qty_delivery > po_outs) {
+          return errorResponse(
+            req,
+            res,
+            `Jumlah quantity pengiriman melebihi quantity outstanding, mohon cek kembali`
+          );
+        }
+        await db.OFFERS.create(
+          {
+            submission_date,
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty,
+            po_outs,
+            sku_code,
+            sku_name,
+            qty_delivery,
+            est_delivery,
+            created_by_id: userId,
+            updated_by_id: userId,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+          { dbTransaction }
+        );
+      } else {
+        const checkIfDataExist = await db.OFFERS.findOne({
+          where: {
+            submission_date,
+            supplier_id: supplier_name, //dicari dulu id nya sesuai
+            po_number,
+            po_qty,
+            po_outs,
+            sku_code,
+            sku_name,
+            qty_delivery,
+            est_delivery,
+          },
+        });
+
+        if (checkIfDataExist) {
+          return errorResponse(
+            req,
+            res,
+            "Ada data duplikat, mohon cek kembali"
+          );
+        }
+
+        if (po_outs > po_qty) {
+          return errorResponse(
+            req,
+            res,
+            `Outstanding quantity tidak bisa lebih besar dari quantity PO, mohon cek kembali`
+          );
+        }
+
+        const [err, result] = await OpenQueryPOOuts(
           po_number,
-          po_qty,
-          po_outs,
           sku_code,
-          sku_name,
-          qty_delivery,
-          est_delivery,
-          created_by_id: userId,
-          updated_by_id: userId,
-          created_at: new Date(),
-          updated_at: new Date(),
-        },
-        { dbTransaction }
-      );
+          dbTransaction
+        );
+        if (!err) {
+          return errorResponse(req, res, "Gagal mencari data PO Outstanding");
+        }
+        if (po_outs > result[0].QUANTITY_OUTSTANDING) {
+          return errorResponse(
+            req,
+            res,
+            `Outstanding quantity tidak cocok dengan data outstanding quantity Oracle untuk PO ${po_number} dan barang ${sku_name}, mohon cek kembali`
+          );
+        }
+
+        if (qty_delivery > po_outs) {
+          return errorResponse(
+            req,
+            res,
+            `Jumlah quantity pengiriman melebihi quantity outstanding, mohon cek kembali`
+          );
+        }
+        await db.OFFERS.create(
+          {
+            submission_date,
+            supplier_id: supplier_name, //dicari dulu id nya sesuai
+            po_number,
+            po_qty,
+            po_outs,
+            sku_code,
+            sku_name,
+            qty_delivery,
+            est_delivery,
+            created_by_id: userId,
+            updated_by_id: userId,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+          { dbTransaction }
+        );
+      }
       await dbTransaction.commit();
       return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
     }
@@ -460,9 +612,36 @@ export const PPICScheduleGet = async (req, res) => {
   }
 };
 
+export const PPICScheduleGetPODetails = async (req, res) => {
+  try {
+    const { po_number, line_num } = req.query;
+
+    const userId = getUserID(req);
+
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const [err, result] = await OpenQueryPODetails(po_number, Number(line_num));
+
+    if (!err) {
+      return errorResponse(req, res, "Gagal refresh data PO Outs");
+    }
+    if (result.length === 0) {
+      return errorResponse(req, res, "Data PO tidak ditemukan");
+    }
+    return successResponse(req, res, result[0]);
+  } catch (error) {
+    return errorResponse(req, res, error.message);
+  }
+};
+
 export const PPICScheduleEdit = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
-  //TODO MASS EDIT
+
   try {
     const { schedules } = req.body.rq_body;
     const userId = getUserID(req);
@@ -533,10 +712,81 @@ export const PPICScheduleEdit = async (req, res) => {
   }
 };
 
+export const PPICScheduleRefreshPOOuts = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const { from_date, to_date } = req.query;
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const whereClause = {
+      submission_date: {
+        [Op.between]: [
+          parsingStringToDateEarly(from_date),
+          parsingStringToDateLate(to_date),
+        ],
+      },
+      deleted_at: null,
+    };
+    const offers = await db.OFFERS.findAll({
+      where: whereClause,
+      attributes: ["po_number", "sku_code"],
+      raw: true, // Ensure that the result is in plain JSON objects
+      group: ["po_number", "sku_code"],
+    });
+
+    for (let key in offers) {
+      const po_number = offers[key].po_number;
+      const sku_code = offers[key].sku_code;
+
+      if (po_number === "") {
+        continue;
+      } else {
+        const [err, res] = await OpenQueryPOOuts(
+          po_number,
+          sku_code,
+          dbTransaction
+        );
+        // console.log()
+        if (!err) {
+          return errorResponse(req, res, "Gagal refresh data PO Outs");
+        }
+
+        const qtyOuts = res[0].QUANTITY_OUTSTANDING;
+        // console.log()
+        if (qtyOuts == null) {
+          continue;
+        } else {
+          await db.OFFERS.update(
+            { po_outs: qtyOuts },
+            {
+              where: {
+                po_number,
+                sku_code,
+              },
+            },
+            { dbTransaction }
+          );
+        }
+      }
+    }
+
+    await dbTransaction.commit();
+    return successResponse(req, res, "Success Refresh Data PO Outs");
+  } catch (error) {
+    await dbTransaction.rollback();
+    return errorResponse(req, res, error.message);
+  }
+};
+
 export const PPICScheduleDelete = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
-    console.log(req);
     const id = req.params.id;
     const userId = getUserID(req);
     const checkId = await db.OFFERS.findOne({
@@ -834,3 +1084,109 @@ export const PPICScheduleHistory = async (req, res) => {};
 export const PPICScheduleHistoryAll = async (req, res) => {};
 
 export const PPICScheduleTransactions = async (req, res) => {};
+
+const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
+  const getLineNumber = await OpenQueryGetLineNum(poNumber, skuCode);
+  const getPOOuts = (po) => {
+    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT
+      SUM(PO_DISTRIBUTIONS_ALL.QUANTITY_ORDERED - PO_DISTRIBUTIONS_ALL.QUANTITY_DELIVERED - PO_DISTRIBUTIONS_ALL.QUANTITY_CANCELLED) "QUANTITY_OUTSTANDING"
+      FROM APPS.PO_HEADERS_ALL, APPS.PO_LINES_ALL, APPS.PO_DISTRIBUTIONS_ALL
+      WHERE PO_HEADERS_ALL.SEGMENT1 = ''${po}''
+        AND PO_LINES_ALL.LINE_NUM = ''${getLineNumber[0].line_number || 1}''
+        AND PO_DISTRIBUTIONS_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID
+        AND PO_LINES_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID')`;
+
+    return queryWithSchema;
+  };
+
+  const rawQuery = getPOOuts(poNumber);
+
+  try {
+    const results = await db.sequelize.query(rawQuery, {
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    return [true, results];
+  } catch (error) {
+    console.error(error.message);
+    return [false, null];
+  }
+};
+
+const OpenQueryPODetails = async (poNumber, lineNumber, transaction) => {
+  const getPODetails = (po, line) => {
+    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
+    SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pap.full_name buyer_name, fu.user_name,
+    (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3) kode_sku, msi.description nama_sku
+    from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
+    APPS.ap_suppliers aps, APPS.mtl_system_items msi,APPS.per_all_people_f pap, APPS.fnd_user fu
+    where 1=1
+    and pha.segment1 = ''${po}''
+	and pha.agent_id = pap.person_id
+	and fu.employee_id = pap.person_id 
+    and pha.po_header_id = pla.po_header_id
+    and pla.po_line_id = pda.po_line_id
+    and pla.line_num = ''${line}''
+    and pha.vendor_id = aps.vendor_id
+    and pla.item_id = msi.inventory_item_id
+    and msi.organization_id = 101
+    group by aps.vendor_Name, pha.segment1,
+    pla.line_num, pla.quantity,pap.full_name, fu.user_name,
+    (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3), 
+    msi.description')`;
+
+    return queryWithSchema;
+  };
+
+  const rawQuery = getPODetails(poNumber, lineNumber);
+
+  try {
+    const results = await db.sequelize.query(rawQuery, {
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    return [true, results];
+  } catch (error) {
+    console.error(error.message);
+    return false;
+  }
+};
+
+const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
+  const skuSplit = skuCode.split(".");
+  const getPODetails = (po, skucode) => {
+    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
+    SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pla.line_num line_number, msi.description nama_sku
+    from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
+    APPS.ap_suppliers aps, APPS.mtl_system_items msi
+    where 1=1
+    and pha.segment1 = ''${po}''
+    and pha.po_header_id = pla.po_header_id
+    and pla.po_line_id = pda.po_line_id
+    and msi.segment1 = ''${skucode[0]}''
+    and msi.segment2 = ''${skucode[1]}''
+    and msi.segment3 = ''${skucode[2]}''
+    and pha.vendor_id = aps.vendor_id
+    and pla.item_id = msi.inventory_item_id
+    and msi.organization_id = 101
+    group by aps.vendor_Name, pha.segment1,
+    pla.line_num, pla.quantity,
+    (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3), 
+    msi.description')`;
+
+    return queryWithSchema;
+  };
+
+  const rawQuery = getPODetails(poNumber, skuSplit);
+
+  try {
+    const results = await db.sequelize.query(rawQuery, {
+      type: QueryTypes.SELECT,
+      transaction,
+    });
+    return [true, results];
+  } catch (error) {
+    console.error(error.message);
+    return [false, null];
+  }
+};
