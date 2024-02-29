@@ -9,6 +9,7 @@ export const id = {
     SKUName: "Nama SKU",
     qtyDelivery: "Qty Pengiriman",
     estDelivery: "Rencana Kirim",
+    buyerName: "Nama Pembeli",
 
     recommendation: "Rekomen",
     yes: "Ya",
@@ -46,6 +47,7 @@ export const id = {
     name: "Nama",
     role: "Role",
     action: "Action",
+    oracleUsername: "Username Oracle",
 
     // supplier
     supplierData: "Data Supplier",

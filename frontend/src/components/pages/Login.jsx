@@ -1,22 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { withRouter } from "react-router-dom";
 import { api } from "api";
 import constant from "constant";
-import { SpinnerOverlay, SyncOverlay } from "components";
+import { SyncOverlay } from "components";
 import utils from "utils";
 import logo from "assets/images/logo_bkp.png";
 import { useTranslation } from "react-i18next";
 import { UserOutlined, LockOutlined } from "@ant-design/icons";
 
-import { Form, Input, Button, Checkbox, Image, Card } from "antd";
+import { Form, Input, Button, Image, Card } from "antd";
 import { Encrypt } from "utils/encryption";
+import ReCAPTCHA from "react-google-recaptcha";
 
 function Login(props) {
   const [t] = useTranslation();
   const [form] = Form.useForm();
-
+  const recaptchaRef = useRef();
   const [pageLoading, setPageLoading] = useState(false);
-
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [captchaValue, setCaptchaValue] = useState(null);
   useEffect(() => {
     if (utils.getUserInfo()) {
       redirectLogin();
@@ -24,9 +26,9 @@ function Login(props) {
   }, []);
 
   const handleSubmitClick = (values) => {
-    console.log("Success:", values);
+    console.log("Success:", { ...values, password: Encrypt(values.password) });
     setPageLoading(true);
-
+    setLoginAttempts((prevAttempts) => prevAttempts + 1);
     const rqBody = {
       employee_id: values.employee_id,
       password: Encrypt(values.password),
@@ -40,29 +42,43 @@ function Login(props) {
         if (rsBody.refresh_token) {
           localStorage.setItem(constant.REFRESH_TOKEN, rsBody.refresh_token);
         }
-
-        redirectLogin();
+        redirectLogin(setLoginAttempts);
       })
       .catch(function (error) {
+        if (captchaValue) {
+          recaptchaRef.current.reset();
+          localStorage.removeItem(constant.GRECAPTCHA);
+          setCaptchaValue(null);
+        }
         utils.swal.Error({ msg: utils.getErrMsg(error) });
+      })
+      .finally(() => {
         setPageLoading(false);
       });
   };
 
-  const redirectLogin = () => {
+  const redirectLogin = (setLoginAttempts) => {
     let redirectTo = "/ppic/dashboard";
-    if (utils.redirectRole(utils.getUserInfo().role.id, 2)) {
+    if (!utils.getUserInfo().password_changed) {
+      redirectTo = "/change-password";
+    } else if (utils.redirectRole(utils.getUserInfo().role.id, 2)) {
       redirectTo = "/ppic/dashboard";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 3)) {
       redirectTo = "/procurement/dashboard";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 4)) {
       redirectTo = "/supplier/dashboard";
     }
+    setLoginAttempts && setLoginAttempts(0);
     window.location = import.meta.env.VITE_WEB_BASE_URL + redirectTo;
   };
 
   const onFinishFailed = (errorInfo) => {
     console.log("Failed:", errorInfo);
+  };
+
+  const onChangeCaptcha = (value) => {
+    setCaptchaValue(value);
+    console.log("Captcha value:", value);
   };
 
   return (
@@ -115,10 +131,25 @@ function Login(props) {
                 prefix={<LockOutlined className="site-form-item-icon" />}
               />
             </Form.Item>
+            {loginAttempts >= 2 && (
+              <Form.Item
+                name="captcha"
+                rules={[{ required: true, message: "Please input the captcha you got!" }]}
+                style={{ justifyContent: "center", display: "flex" }}
+              >
+                {/* Show captcha after 2 or more failed login attempts */}
 
-            <Form.Item name="remember" valuePropName="checked" className="mb-2">
+                <ReCAPTCHA
+                  ref={recaptchaRef}
+                  sitekey="6LduxYIpAAAAAFd3ZTmgRkZcQcxmRyKaV2FEVE6U"
+                  onChange={onChangeCaptcha}
+                />
+              </Form.Item>
+            )}
+
+            {/* <Form.Item name="remember" valuePropName="checked" className="mb-2">
               <Checkbox>{t("stayLoggedIn")}</Checkbox>
-            </Form.Item>
+            </Form.Item> */}
 
             <Form.Item className="text-center mb-0">
               <Button type="primary" htmlType="submit" block>

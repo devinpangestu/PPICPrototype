@@ -96,6 +96,7 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
             sku_name: r[6],
             qty_delivery: utils.convertSeparateValueToNumericValue(r[7]),
             est_delivery: sendToApiFormat(r[8]),
+            notes_ppic: r[9],
           });
         }
         setMassCreateFileContent(tempMassCreateFileContent);

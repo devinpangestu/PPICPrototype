@@ -35,9 +35,10 @@ import ModalCreate from "./modal/ModalCreate";
 
 import moment from "moment";
 import handler from "handler";
-import { authorizationCheck, isMobile } from "utils/auth";
+import { authorizationCheck, isMobile, passwordChangedCheck } from "utils/auth";
 import { useSearchFilterStore } from "state/ppic/searchFilterState";
 import { useDataStore } from "state/ppic/dataState";
+import { Decrypt } from "utils/encryption";
 
 const EditableContext = React.createContext(null);
 const EditableRow = ({ index, ...props }) => {
@@ -154,9 +155,7 @@ const EditableCell = ({
           ...values,
         });
       }
-    } catch (errInfo) {
-      console.log(errInfo);
-    }
+    } catch (errInfo) {}
   };
 
   let childNode = children;
@@ -247,7 +246,7 @@ const PPICView = (props) => {
   let defaultFilterStatus = null;
   let defaultActiveTab = "all";
   if (userInfo.role.id === 2) {
-    defaultFilterStatus = constant.FLAG_STATUS_PPIC_INIT;
+    defaultFilterStatus = null;
     defaultActiveTab = defaultFilterStatus;
   } else if (userInfo.role.id === 3) {
     defaultFilterStatus = constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC;
@@ -258,31 +257,43 @@ const PPICView = (props) => {
   }
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
-      if (record.edit_from_id !== null) {
+      if (record.flag_status === constant.FLAG_STATUS_PPIC_INIT) {
         return (
-          <p style={{ margin: 0 }}>
-            {`${moment(JSON.parse(record.notes)?.updated_at).format(
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.updated_by} : ${JSON.parse(record.notes)?.edit_req_sup}`}
+            )} ${JSON.parse(record.notes)?.init?.created_by} : ${
+              JSON.parse(record.notes)?.init?.notes
+            }`}
+          </p>
+        );
+      } else if (record.edit_from_id !== null) {
+        return (
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.edit_req?.created_at).format(
+              constant.FORMAT_DISPLAY_DATETIME,
+            )} ${JSON.parse(record.notes)?.edit_req?.created_by} : ${
+              JSON.parse(record.notes)?.edit_req?.notes
+            }`}
           </p>
         );
       } else if (record.split_from_id !== null) {
         return (
-          <p style={{ margin: 0 }}>
-            {`${moment(JSON.parse(record.notes)?.updated_at).format(
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.split_req?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.updated_by} : ${
-              JSON.parse(record.notes)?.split_req_sup
+            )} ${JSON.parse(record.notes)?.split_req?.created_by} : ${
+              JSON.parse(record.notes)?.split_req?.notes
             } `}
           </p>
         );
       } else {
         return (
-          <p style={{ margin: 0 }}>
-            {`${moment(JSON.parse(record.notes)?.updated_at).format(
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.retur?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.updated_by} : ${
-              JSON.parse(record.notes)?.retur_proc_ppic
+            )} ${JSON.parse(record.notes)?.retur?.created_by} : ${
+              JSON.parse(record.notes)?.retur?.notes
             }`}
           </p>
         );
@@ -290,11 +301,13 @@ const PPICView = (props) => {
     },
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
-        (record.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+        (record.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+          record.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
           record.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) &&
-        (JSON.parse(record.notes)?.retur_proc_ppic ||
-          JSON.parse(record.notes)?.edit_req_sup ||
-          JSON.parse(record.notes)?.split_req_sup);
+        (JSON.parse(record.notes)?.init?.notes ||
+          JSON.parse(record.notes)?.retur?.notes ||
+          JSON.parse(record.notes)?.edit_req?.notes ||
+          JSON.parse(record.notes)?.split_req?.notes);
       return checkFlagStatus(record);
     },
   });
@@ -402,7 +415,6 @@ const PPICView = (props) => {
     setPageLoading(true);
     try {
       const responseList = await api.ppic.list(search, 1000, 1, params);
-
       const rsBodyList = responseList.data.rs_body;
       const offerData = rsBodyList.offer.filter((offer) => !offer.deleted_at);
       const offerDataCheckList = rsBodyList.offer.filter(
@@ -415,15 +427,41 @@ const PPICView = (props) => {
           item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
           !item.deleted_at,
       );
-
-      setOldDataSource(offerData.map((offer, index) => ({ key: index + 1, ...offer })));
       setDataSource([...offerData]);
-      setOffers([...offerData]);
-      setTotalData(offerData.length);
-      setDeletedRows(rsBodyList.offer.filter((row) => row.deleted_at !== null));
+      if (
+        !filteredInfo.po_number &&
+        !filteredInfo.sku_code &&
+        !filteredInfo.sku_name &&
+        !filteredInfo.supplier_name &&
+        !filteredInfo.buyer_name
+      ) {
+        setOldDataSource(offerData.map((offer, index) => ({ key: index + 1, ...offer })));
 
-      if (offerData.length > 0) {
-        setPreviewRowChecked(offerDataCheckList.map(() => false));
+        setOffers([...offerData]);
+        setTotalData(offerData.length);
+        setDeletedRows(rsBodyList.offer.filter((row) => row.deleted_at !== null));
+        if (offerData.length > 0) {
+          setPreviewRowChecked(rsBodyList.offer.map(() => false));
+          setArrayOfMerge(
+            offerData.map((currRow, index) => {
+              const nextRow = offerData[index + 1];
+              return (
+                nextRow &&
+                currRow.supplier_id === nextRow.supplier_id &&
+                currRow.po_number === nextRow.po_number &&
+                currRow.sku_code === nextRow.sku_code &&
+                currRow.po_qty === nextRow.po_qty &&
+                currRow.flag_status === nextRow.flag_status &&
+                currRow.split_from_id === nextRow.split_from_id
+              );
+            }),
+          );
+          setEditTableMode(false);
+        } else {
+          setPreviewRowChecked([]);
+          setArrayOfMerge([]);
+        }
+      } else {
         setArrayOfMerge(
           offerData.map((currRow, index) => {
             const nextRow = offerData[index + 1];
@@ -438,10 +476,7 @@ const PPICView = (props) => {
             );
           }),
         );
-        setEditTableMode(false);
-      } else {
-        setPreviewRowChecked([]);
-        setArrayOfMerge([]);
+        setPreviewRowChecked(rsBodyList.offer.map(() => false));
       }
     } catch (error) {
       utils.swal.Error({ msg: utils.getErrMsg(error) });
@@ -502,6 +537,7 @@ const PPICView = (props) => {
               currRow.po_number === nextRow.po_number &&
               currRow.sku_code === nextRow.sku_code &&
               currRow.po_qty === nextRow.po_qty &&
+              currRow.flag_status === nextRow.flag_status &&
               currRow.split_from_id === nextRow.split_from_id
             );
           }),
@@ -528,27 +564,20 @@ const PPICView = (props) => {
   const handleChange = (pagination, filters, sorter, extra) => {
     setFilteredInfo(filters);
     setSortedInfo(sorter);
-    setArrayOfMerge(
-      extra.currentDataSource.map((currRow, index) => {
-        const nextRow = extra.currentDataSource[index + 1];
-        return (
-          nextRow &&
-          currRow.supplier_id === nextRow.supplier_id &&
-          currRow.po_number === nextRow.po_number &&
-          currRow.sku_code === nextRow.sku_code &&
-          currRow.po_qty === nextRow.po_qty &&
-          currRow.flag_status === nextRow.flag_status &&
-          currRow.split_from_id === nextRow.split_from_id &&
-          (currRow.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-            currRow.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST ||
-            currRow.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-            currRow.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-            currRow.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-            currRow.flag_status === constant.FLAG_STATUS_SUPPLIER)
-        );
-      }),
-    );
-    setDataSource(extra.currentDataSource);
+
+    setPreviewRowChecked(extra.currentDataSource.map(() => false));
+
+    if (
+      !filteredInfo.po_number &&
+      !filteredInfo.sku_code &&
+      !filteredInfo.sku_name &&
+      !filteredInfo.supplier_name &&
+      !filteredInfo.buyer_name
+    ) {
+      setDataSource(extra.currentDataSource);
+    } else {
+      setDataSource(oldDataSource);
+    }
   };
 
   const loadSuppliersOption = async () => {
@@ -567,56 +596,35 @@ const PPICView = (props) => {
       setPreviewRowChecked(updatedPreviewRowChecked);
     }
   };
-  // const onChangeSupplierList = async (value) => {
-  //   let errMsg;
-
-  //   setSuppliersSearch(value);
-  //   const otherParams = {
-  //     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-  //     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-  //     supplier_id: value ?? null,
-  //     user_id: usersSearch ?? null,
-  //     status: filterStatus,
-  //   };
-  //   fetchData(otherParams);
-  //   fetchSummary(otherParams);
-  // };
-
-  // const onChangeUserList = async (value) => {
-  //   let errMsg;
-
-  //   setUsersSearch(value);
-  //   const otherParams = {
-  //     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-  //     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-  //     supplier_id: suppliersSearch ?? null,
-  //     user_id: value ?? null,
-  //     status: filterStatus,
-  //   };
-  //   fetchData(otherParams);
-  //   fetchSummary(otherParams);
-  // };
 
   const onResetFilter = async () => {
     setPageLoading(true);
-    setUsersSearch(null);
-    setSuppliersSearch(null);
     setFilterValue({
       supplier_id: null,
-      user_id: null,
+      user_id: Decrypt(userInfo.user_id),
       search_PO: null,
+      io_filter: null,
+      category_filter: null,
     });
-    form.setFieldsValue({ user_list: null, supplier_list: null, search_PO: null });
+    form.setFieldsValue({
+      user_filter: userInfo.user_name,
+      supplier_list: null,
+      search_PO: null,
+      io_filter: null,
+      category_filter: null,
+    });
     const otherParams = {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
       supplier_id: null,
-      user_id: null,
+      user_id: Decrypt(userInfo.user_id),
+      io_filter: null,
+      category_filter: null,
       search_PO: null,
       status: null,
     };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
+    await fetchData(otherParams);
+    await fetchSummary(otherParams);
   };
 
   useEffect(() => {
@@ -628,8 +636,10 @@ const PPICView = (props) => {
         const otherParams = {
           from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
           to_date: moment().format(constant.FORMAT_API_DATE),
-          supplier_id: suppliersSearch ?? null,
-          user_id: usersSearch ?? null,
+          supplier_id: filterValue?.supplier_id ?? null,
+          user_id: filterValue?.user_id ?? Decrypt(userInfo.user_id) ?? null,
+          io_filter: filterValue?.io_filter ?? null,
+          category_filter: filterValue?.category_filter ?? null,
           status: filterStatus,
           search_PO: filterValue?.search_PO,
         };
@@ -643,14 +653,32 @@ const PPICView = (props) => {
       });
     loadSuppliersOption();
     authorizationCheck(userInfo);
+    passwordChangedCheck(userInfo);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (
+      minDateLoaded &&
+      filterStatus !== "A" &&
+      filterStatus !== "C" &&
+      filterStatus !== "G" &&
+      filterStatus !== "X" &&
+      filterStatus !== "deleted" &&
+      filterStatus !== null
+    ) {
+      loadOffers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, filterValue, filteredInfo, sortedInfo]);
+  //when offers change load the user that responsible for making notes
+  useEffect(() => {
+    setFilteredInfo({});
+    setSortedInfo({});
+
     if (minDateLoaded) {
       loadOffers();
     }
-  }, [minDateLoaded, filterStatus, pageNumber, dateRange, search, filterValue, filteredInfo]); // eslint-disable-line react-hooks/exhaustive-deps
-  //when offers change load the user that responsible for making notes
+  }, [pageNumber, minDateLoaded, filterStatus]);
 
   const loadOffers = async () => {
     let errMsg;
@@ -658,17 +686,35 @@ const PPICView = (props) => {
     const otherParams = {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+      user_id: filterValue?.user_id ?? Decrypt(userInfo.user_id) ?? null,
     };
 
     if (filterStatus !== "deleted") {
       if (filterStatus) otherParams.status = filterStatus;
-      if (filterValue.supplier_id) otherParams.supplier_id = filterValue.supplier_id;
-      if (filterValue.user_id) otherParams.user_id = filterValue.user_id;
-      if (filterValue.search_PO) otherParams.searchPO = filterValue.search_PO;
+      if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
+      if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
+      if (filterValue.io_filter) otherParams.io_filter = filterValue?.io_filter;
+      if (filterValue.category_filter) otherParams.category_filter = filterValue?.category_filter;
+      if (filterValue.search_PO) otherParams.searchPO = filterValue?.search_PO;
       if (search) otherParams.search = search;
-      await fetchData(otherParams);
+      if (
+        !filteredInfo.po_number ||
+        !filteredInfo.sku_code ||
+        !filteredInfo.sku_name ||
+        !filteredInfo.supplier_name ||
+        !filteredInfo.buyer_name ||
+        !sortedInfo.column
+      ) {
+        await fetchData(otherParams);
+      }
     } else {
       if (filterStatus) otherParams.status = filterStatus;
+      if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
+      if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
+      if (filterValue.io_filter) otherParams.io_filter = filterValue?.io_filter;
+      if (filterValue.category_filter) otherParams.category_filter = filterValue?.category_filter;
+      if (filterValue.search_PO) otherParams.searchPO = filterValue?.search_PO;
+      if (search) otherParams.search = search;
       await fetchDeletedData(otherParams);
     }
     if (errMsg) {
@@ -765,7 +811,6 @@ const PPICView = (props) => {
     if (editedDataIndex !== -1) {
       editedData.splice(editedDataIndex, 1);
     }
-    console.log(JSON.stringify({ ...row }) === JSON.stringify(oldDataSource[index]));
     setEditedData([...editedData, row]);
     setDataSource(newData);
   };
@@ -785,15 +830,34 @@ const PPICView = (props) => {
     return [
       ...new Set(
         offers.map((item) => {
-          if (dataIndex !== "supplier_name") {
-            return item[dataIndex];
-          } else {
+          if (dataIndex === "supplier_name") {
             return item.supplier.name;
+          } else if (dataIndex === "buyer_name") {
+            return item.buyer.name;
+          } else {
+            return item[dataIndex];
           }
         }),
       ),
     ].map((value) => {
       if (dataIndex !== "supplier_name") {
+        if (dataIndex === "po_number") {
+          if (value === "" || value === null) {
+            return {
+              text: "Empty PO",
+              value: "",
+            };
+          }
+          return {
+            text: value,
+            value,
+          };
+        }
+        return {
+          text: value,
+          value,
+        };
+      } else if (dataIndex !== "buyer_name") {
         return {
           text: value,
           value,
@@ -823,6 +887,16 @@ const PPICView = (props) => {
           ].includes(filterStatus)
         )
           return;
+        if (
+          filteredInfo.po_number ||
+          filteredInfo.sku_code ||
+          filteredInfo.sku_name ||
+          filteredInfo.supplier_name ||
+          filteredInfo.buyer_name ||
+          sortedInfo.column
+        )
+          return;
+
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
           switch (filterStatus) {
@@ -847,7 +921,11 @@ const PPICView = (props) => {
             default:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_SUPPLIER ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST
               );
           }
         };
@@ -861,9 +939,11 @@ const PPICView = (props) => {
               style={{ justifyContent: "center", display: "flex" }}
               onChange={(e) => {
                 const isChecked = e.target.checked;
-                const updatedPreviewRowChecked = previewRowChecked.map(
-                  (_, i) => isChecked && isDataComplete(offers[i]) && toggleCheckboxTitle,
-                );
+                const updatedPreviewRowChecked = previewRowChecked.map((_, i) => {
+                  return (
+                    dataSource && isChecked && isDataComplete(dataSource[i]) && toggleCheckboxTitle
+                  );
+                });
                 setPreviewRowChecked(updatedPreviewRowChecked);
               }}
               onClick={(e) => {
@@ -876,6 +956,7 @@ const PPICView = (props) => {
       },
       dataIndex: "check",
       key: "check",
+      width: "3vw",
       render: (_v, record, index) => {
         const flagStatus = record?.flag_status;
         if (
@@ -953,7 +1034,6 @@ const PPICView = (props) => {
       onFilter: (value, record) => {
         return record?.supplier?.name.includes(value);
       },
-
       filterSearch: true,
       render: (_, row) => {
         return row?.supplier?.name;
@@ -965,11 +1045,11 @@ const PPICView = (props) => {
       key: "po_number",
       editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
-
       filters: filterColumnOpt("po_number"),
       filteredValue: filteredInfo.po_number || null,
-      onFilter: (value, record) => record?.po_number.includes(value),
-
+      onFilter: (value, record) => {
+        return value === "" ? record?.po_number === "" : record?.po_number.includes(value);
+      },
       filterSearch: true,
       render: (_, row) => {
         if (editTableMode) {
@@ -983,6 +1063,9 @@ const PPICView = (props) => {
       dataIndex: "po_qty",
       key: "po_qty",
       editable: editTableMode,
+      sorter: (a, b) => {
+        return moment(a.po_qty) - moment(b.po_qty);
+      },
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       render: (_, row) => {
@@ -1030,6 +1113,9 @@ const PPICView = (props) => {
       dataIndex: "qty_delivery",
       key: "qty_delivery",
       editable: editTableMode,
+      sorter: (a, b) => {
+        return moment(a.qty_delivery) - moment(b.qty_delivery);
+      },
       render: (_, row) => {
         return utils.thousandSeparator(row?.qty_delivery);
       },
@@ -1050,6 +1136,9 @@ const PPICView = (props) => {
       title: t("supplierQty"),
       dataIndex: "submitted_qty",
       key: "submitted_qty",
+      sorter: (a, b) => {
+        return moment(a.submitted_qty) - moment(b.submitted_qty);
+      },
       render: (_, row) => {
         return utils.thousandSeparator(row?.submitted_qty);
       },
@@ -1065,6 +1154,22 @@ const PPICView = (props) => {
         return row?.est_submitted_date
           ? moment(row?.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
           : "-";
+      },
+    },
+    {
+      title: t("buyerName"),
+      dataIndex: "buyer_name",
+      key: "buyer_name",
+      editable: editTableMode,
+      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      filters: filterColumnOpt("buyer_name"),
+      filteredValue: filteredInfo?.buyer_name || null,
+      onFilter: (value, record) => {
+        return record?.buyer?.name.includes(value);
+      },
+      filterSearch: true,
+      render: (_, row) => {
+        return row?.buyer?.name;
       },
     },
     {
@@ -1115,8 +1220,10 @@ const PPICView = (props) => {
                   const otherParams = {
                     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
                     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                    supplier_id: suppliersSearch ?? null,
-                    user_id: usersSearch ?? null,
+                    supplier_id: filterValue?.supplier_id ?? null,
+                    user_id: filterValue?.user_id ?? null,
+                    io_filter: filterValue?.io_filter ?? null,
+                    category_filter: filterValue?.category_filter ?? null,
                     status: filterStatus,
                     search_PO: filterValue?.search_PO,
                   };
@@ -1212,11 +1319,14 @@ const PPICView = (props) => {
                         const otherParams = {
                           from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
                           to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                          supplier_id: suppliersSearch ?? null,
-                          user_id: usersSearch ?? null,
+                          supplier_id: filterValue?.supplier_id ?? null,
+                          user_id: filterValue?.user_id ?? null,
+                          io_filter: filterValue?.io_filter ?? null,
+                          category_filter: filterValue?.category_filter ?? null,
                           status: filterStatus,
                           search_PO: filterValue?.search_PO,
                         };
+
                         fetchSummary(otherParams);
                       });
                   },
@@ -1318,7 +1428,6 @@ const PPICView = (props) => {
       },
     },
   ];
-
   const columns = defaultColumns.map((col) => {
     if (!col.editable) {
       return col;
@@ -1340,17 +1449,32 @@ const PPICView = (props) => {
     if (!values) {
       return;
     }
+
     let newFilterValue = {};
     if (values.supplier_list) {
       newFilterValue.supplier_id = values.supplier_list;
     }
-    if (values.user_list) {
-      newFilterValue.user_id = values.user_list;
+    if (values.user_filter) {
+      newFilterValue.user_id = values.user_filter;
+    }
+    if (values.io_filter) {
+      newFilterValue.io_filter = values.io_filter;
+    }
+    if (values.category_filter) {
+      newFilterValue.category_filter = values.category_filter;
     }
     if (values.search_PO) {
       newFilterValue.search_PO = values.search_PO;
     }
     setFilterValue(newFilterValue);
+    setFilteredInfo({});
+
+    fetchData({
+      ...newFilterValue,
+      status: filterStatus ?? null,
+      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+    });
     fetchSummary({
       ...newFilterValue,
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
@@ -1405,11 +1529,14 @@ const PPICView = (props) => {
                                       constant.FORMAT_API_DATE,
                                     ),
                                     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                                    supplier_id: suppliersSearch ?? null,
-                                    user_id: usersSearch ?? null,
+                                    supplier_id: filterValue?.supplier_id ?? null,
+                                    user_id: filterValue?.user_id ?? null,
+                                    io_filter: filterValue?.io_filter ?? null,
+                                    category_filter: filterValue?.category_filter ?? null,
                                     status: filterStatus,
                                     search_PO: filterValue?.search_PO,
                                   };
+
                                   fetchSummary(otherParams);
                                 });
                             },
@@ -1458,11 +1585,14 @@ const PPICView = (props) => {
                                 const otherParams = {
                                   from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
                                   to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                                  supplier_id: suppliersSearch ?? null,
-                                  user_id: usersSearch ?? null,
+                                  supplier_id: filterValue?.supplier_id ?? null,
+                                  user_id: filterValue?.user_id ?? null,
+                                  io_filter: filterValue?.io_filter ?? null,
+                                  category_filter: filterValue?.category_filter ?? null,
                                   status: filterStatus,
                                   search_PO: filterValue?.search_PO,
                                 };
+
                                 fetchSummary(otherParams);
                               });
                           },
@@ -1654,11 +1784,14 @@ const PPICView = (props) => {
           const otherParams = {
             from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
             to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: usersSearch ?? null,
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            category_filter: filterValue?.category_filter ?? null,
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
+
           fetchSummary(otherParams);
         }}
       />
@@ -1674,11 +1807,14 @@ const PPICView = (props) => {
           const otherParams = {
             from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
             to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: usersSearch ?? null,
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            category_filter: filterValue?.category_filter ?? null,
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
+
           fetchSummary(otherParams);
         }}
         data={modalSplitScheduleData}
@@ -1695,11 +1831,14 @@ const PPICView = (props) => {
           const otherParams = {
             from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
             to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: usersSearch ?? null,
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            category_filter: filterValue?.category_filter ?? null,
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
+
           fetchSummary(otherParams);
         }}
       />
@@ -1715,11 +1854,14 @@ const PPICView = (props) => {
           const otherParams = {
             from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
             to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: usersSearch ?? null,
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            category_filter: filterValue?.category_filter ?? null,
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
+
           fetchSummary(otherParams);
         }}
         id={modalEditData}
@@ -1749,11 +1891,14 @@ const PPICView = (props) => {
                         const otherParams = {
                           from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
                           to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
-                          supplier_id: suppliersSearch ?? null,
-                          user_id: usersSearch ?? null,
+                          supplier_id: filterValue?.supplier_id ?? null,
+                          user_id: filterValue?.user_id ?? null,
+                          io_filter: filterValue?.io_filter ?? null,
+                          category_filter: filterValue?.category_filter ?? null,
                           status: filterStatus,
                           search_PO: filterValue?.search_PO,
                         };
+
                         fetchSummary(otherParams);
                       }}
                       allowClear={false}
@@ -1761,7 +1906,7 @@ const PPICView = (props) => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="User" name="user_list" className="mb-2">
+                  <Form.Item label="User" name="user_filter" className="mb-2">
                     <Select
                       showSearch
                       placeholder="Select User"
@@ -1781,20 +1926,34 @@ const PPICView = (props) => {
                 </Col> */}
               </Row>
               <Row gutter={8}>
-                {/* <Col span={12}>
-                  <Form.Item label="Supplier" name="supplier_list" className="mb-2">
+                <Col span={12}>
+                  <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
                     <Select
                       showSearch
-                      placeholder="Select Supplier"
+                      placeholder="Select I/O"
                       optionFilterProp="children"
                       // onChange={onChangeSupplierList}
                       style={{ width: "100%" }}
                       filterOption={filterOption}
-                      options={suppliers}
+                      options={constant.WAREHOUSE_LIST}
                       defaultValue={null}
                     />
                   </Form.Item>
-                </Col> */}
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Category" name="category_filter" className="mb-2">
+                    <Select
+                      showSearch
+                      placeholder="Select Category"
+                      optionFilterProp="children"
+                      // onChange={onChangeSupplierList}
+                      style={{ width: "100%" }}
+                      filterOption={filterOption}
+                      options={constant.PPIC_CATEGORY_LIST}
+                      defaultValue={null}
+                    />
+                  </Form.Item>
+                </Col>
               </Row>
               <Form.Item className="mb-2">
                 <Button type="primary" htmlType="submit">

@@ -3,7 +3,7 @@ import { Link, withRouter } from "react-router-dom";
 import { PageContainer } from "components/layout";
 import { useSearchFilterStore } from "state/purchasing/searchFilterState";
 import { useDataStore } from "state/purchasing/dataState";
-import { TableNotFoundNotice, SyncOverlay } from "components";
+import { TableNotFoundNotice, SyncOverlay, SectionHeading } from "components";
 import {
   Row,
   Col,
@@ -21,6 +21,7 @@ import {
   Checkbox,
   Space,
   Table,
+  Card,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -37,7 +38,8 @@ import moment from "moment";
 
 import handler from "handler";
 import ModalReturSchedule from "./modal/ModalReturSchedule";
-import { authorizationCheck, isMobile } from "utils/auth";
+import { authorizationCheck, isMobile, passwordChangedCheck } from "utils/auth";
+import { Decrypt } from "utils/encryption";
 
 const EditableContext = React.createContext(null);
 const EditableRow = ({ index, ...props }) => {
@@ -210,18 +212,20 @@ const PurchasingView = (props) => {
       if (record.edit_from_id !== null) {
         return (
           <p style={{ margin: 0 }}>
-            {`${moment(JSON.parse(record.notes)?.updated_at).format(
+            {`${moment(JSON.parse(record.notes)?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.updated_by} : ${JSON.parse(record.notes)?.edit_req_sup}`}
+            )} ${JSON.parse(record.notes)?.created_by} : ${
+              JSON.parse(record.notes)?.edit_req?.notes
+            }`}
           </p>
         );
       } else if (record.split_from_id !== null) {
         return (
           <p style={{ margin: 0 }}>
-            {`${moment(JSON.parse(record.notes)?.updated_at).format(
+            {`${moment(JSON.parse(record.notes)?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.updated_by} : ${
-              JSON.parse(record.notes)?.split_req_sup
+            )} ${JSON.parse(record.notes)?.created_by} : ${
+              JSON.parse(record.notes)?.split_req?.notes
             } `}
           </p>
         );
@@ -232,7 +236,7 @@ const PurchasingView = (props) => {
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
         record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
-        (JSON.parse(record.notes)?.edit_req_sup || JSON.parse(record.notes)?.split_req_sup);
+        (JSON.parse(record.notes)?.edit_req?.notes || JSON.parse(record.notes)?.split_req?.notes);
       return checkFlagStatus(record);
     },
   });
@@ -258,6 +262,8 @@ const PurchasingView = (props) => {
     setSuppliersSearch,
     usersSearch,
     setUsersSearch,
+    filterValue,
+    setFilterValue,
     editTableMode,
     setEditTableMode,
     search,
@@ -308,6 +314,32 @@ const PurchasingView = (props) => {
   } = useSearchFilterStore();
 
   // const [previewRowChecked, setPreviewRowChecked] = useState([]);
+  const rowClassName = (record, index) => {
+    const flagStatus = record?.flag_status;
+    const statusEdited = record?.status_edited;
+
+    if (editTableMode && statusEdited) {
+      return "background-color warning-2";
+    }
+    if (
+      (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+        (flagStatus !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+          flagStatus !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT)) &&
+      editTableMode
+    ) {
+      return "background-color error";
+    }
+    if (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+      return "background-color primary-3";
+    }
+    if (
+      flagStatus !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+      flagStatus !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+    ) {
+      return "background-color warning-2";
+    }
+    return "editable-row";
+  };
 
   const fetchData = async (params) => {
     let errMsg;
@@ -391,9 +423,6 @@ const PurchasingView = (props) => {
     const updatedPreviewRowChecked = previewRowChecked.map((isChecked, i) => {
       return i === index ? !isChecked : isChecked;
     });
-    // if (arrayOfMerge[index]) {
-    //   updatedPreviewRowChecked[index + 1] = !updatedPreviewRowChecked[index + 1];
-    // }
     if (!initialChecked) {
       if (
         status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
@@ -412,46 +441,32 @@ const PurchasingView = (props) => {
     }
     setPreviewRowChecked(updatedPreviewRowChecked);
   };
-  const onChangeSupplierList = (value) => {
-    setPageLoading(true);
-    setSuppliersSearch(value);
-    const otherParams = {
-      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-      supplier_id: value ?? null,
-      user_id: usersSearch ?? null,
-      status: filterStatus,
-    };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
-  };
-  const onChangeUserList = async (value) => {
-    setPageLoading(true);
-    setUsersSearch(value);
-    const otherParams = {
-      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-      supplier_id: suppliersSearch ?? null,
-      user_id: value ?? null,
-      status: filterStatus,
-    };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
-  };
+
   const onResetFilter = async () => {
     setPageLoading(true);
-    setUsersSearch(null);
-    setSuppliersSearch(null);
-    form.setFieldsValue({ user_list: null, supplier_list: null });
+    setFilterValue({
+      supplier_id: null,
+      user_id: Decrypt(userInfo.user_id),
+      io_filter: null,
+      search_PO: null,
+    });
+    form.setFieldsValue({
+      user_filter: userInfo.user_name,
+      supplier_list: null,
+      io_filter: null,
+      search_PO: null,
+    });
     const otherParams = {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
       supplier_id: null,
-      user_id: null,
-      status: filterStatus,
+      user_id: Decrypt(userInfo.user_id),
+      io_filter: null,
+      search_PO: null,
+      status: null,
     };
-    fetchData(otherParams);
-    fetchSummary(otherParams);
+    await fetchData(otherParams);
+    await fetchSummary(otherParams);
   };
 
   useEffect(() => {
@@ -464,7 +479,7 @@ const PurchasingView = (props) => {
           from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
           to_date: moment().format(constant.FORMAT_API_DATE),
           supplier_id: suppliersSearch ?? null,
-          user_id: usersSearch ?? null,
+          user_id: usersSearch ?? Decrypt(userInfo.user_id) ?? null,
           status: filterStatus,
         };
         fetchSummary(otherParams);
@@ -478,6 +493,7 @@ const PurchasingView = (props) => {
       });
     loadSuppliersOption();
     authorizationCheck(userInfo);
+    passwordChangedCheck(userInfo);
     return () => {
       setFilterStatus(null);
       setOffers([]);
@@ -486,10 +502,28 @@ const PurchasingView = (props) => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (
+      minDateLoaded &&
+      filterStatus !== "B" &&
+      filterStatus !== "D" &&
+      filterStatus !== "F" &&
+      filterStatus !== "X" &&
+      filterStatus !== "deleted" &&
+      filterStatus !== null
+    ) {
+      loadOffers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, filterValue, filteredInfo, sortedInfo]);
+  //when offers change load the user that responsible for making notes
+  useEffect(() => {
+    setFilteredInfo({});
+    setSortedInfo({});
+
     if (minDateLoaded) {
       loadOffers();
     }
-  }, [minDateLoaded, filterStatus, pageNumber, dateRange, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageNumber, minDateLoaded, filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadOffers = async () => {
     let errMsg;
@@ -498,12 +532,25 @@ const PurchasingView = (props) => {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
     };
-    if (filterStatus) otherParams.status = filterStatus;
-    if (suppliersSearch) otherParams.supplier_id = suppliersSearch;
-    if (usersSearch) otherParams.user_id = usersSearch;
-    if (search) otherParams.search = search;
 
-    fetchData(otherParams);
+    if (filterStatus !== "deleted") {
+      if (filterStatus) otherParams.status = filterStatus;
+      if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
+      if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
+      if (filterValue.io_filter) otherParams.io_filter = filterValue?.io_filter;
+      if (filterValue.search_PO) otherParams.searchPO = filterValue?.search_PO;
+      if (search) otherParams.search = search;
+      if (
+        !filteredInfo.po_number ||
+        !filteredInfo.sku_code ||
+        !filteredInfo.sku_name ||
+        !filteredInfo.supplier_name ||
+        !filteredInfo.buyer_name ||
+        !sortedInfo.column
+      ) {
+        await fetchData(otherParams);
+      }
+    }
     if (errMsg) {
       setPageLoading(false);
       utils.swal.Error({ msg: errMsg });
@@ -537,13 +584,25 @@ const PurchasingView = (props) => {
       return { rowSpan: count + 1 };
     }
   };
+  const areObjectsEqualPartial = (obj1, obj2, keysToCompare) => {
+    for (const key of keysToCompare) {
+      if (obj1[key] !== obj2[key]) {
+        return false;
+      }
+    }
+    return true;
+  };
   const handleSave = (row) => {
+    const keyToCompare = ["po_number"];
     const newData = [...dataSource];
     const index = newData.findIndex((item) => row.key === item.key);
     const item = newData[index];
     newData.splice(index, 1, {
       ...item,
       ...row,
+      status_edited: areObjectsEqualPartial({ ...row }, oldDataSource[index], keyToCompare)
+        ? false
+        : true,
     });
 
     const editedDataIndex = editedData.findIndex((item) => item.id === row.id);
@@ -564,12 +623,65 @@ const PurchasingView = (props) => {
       cell: EditableCell,
     },
   };
+  const filterColumnOpt = (dataIndex) => {
+    return [
+      ...new Set(
+        offers.map((item) => {
+          if (dataIndex === "supplier_name") {
+            return item.supplier.name;
+          } else if (dataIndex === "sku_name") {
+            return item.sku_name;
+          } else {
+            return item[dataIndex];
+          }
+        }),
+      ),
+    ].map((value) => {
+      if (dataIndex !== "supplier_name") {
+        if (dataIndex === "po_number") {
+          if (value === "" || value === null) {
+            return {
+              text: "Empty PO",
+              value: "",
+            };
+          }
+          return {
+            text: value,
+            value,
+          };
+        } else {
+          return {
+            text: value,
+            value,
+          };
+        }
+      } else if (dataIndex !== "sku_name") {
+        return {
+          text: value,
+          value,
+        };
+      } else {
+        return {
+          text: suppliers.find((sup) => sup.label === value).label,
+          value: suppliers.find((sup) => sup.label === value).label,
+        };
+      }
+    });
+  };
   const defaultColumns = [
     {
       title: (_, record, index) => {
-        if (editTableMode) return;
-        if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
-        if (filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST) return;
+        if (
+          editTableMode ||
+          filteredInfo.po_number ||
+          filteredInfo.sku_code ||
+          filteredInfo.sku_name ||
+          filteredInfo.supplier_name ||
+          sortedInfo.column ||
+          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE
+        ) {
+          return;
+        }
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
           const poNumber = record?.po_number;
@@ -599,7 +711,7 @@ const PurchasingView = (props) => {
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                poNumber === ""
+                utils.isNull(poNumber)
               );
           }
         };
@@ -626,7 +738,7 @@ const PurchasingView = (props) => {
       },
       dataIndex: "check",
       key: "check",
-
+      width: "5vw",
       render: (_, record, index) => {
         if (editTableMode) return;
         if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
@@ -670,6 +782,9 @@ const PurchasingView = (props) => {
       title: t("submissionDate"),
       dataIndex: "submission_date",
       key: "submission_date",
+      sorter: (a, b) => {
+        return moment(a.submission_date) - moment(b.submission_date);
+      },
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       render: (_, row) => {
         return moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE);
@@ -679,6 +794,12 @@ const PurchasingView = (props) => {
       title: t("supplierName"),
       dataIndex: "supplier_name",
       key: "supplier_name",
+      filters: filterColumnOpt("supplier_name"),
+      filteredValue: filteredInfo?.supplier_name || null,
+      onFilter: (value, record) => {
+        return record?.supplier?.name.includes(value);
+      },
+      filterSearch: true,
       render: (_, row) => {
         return row?.supplier?.name;
       },
@@ -691,15 +812,14 @@ const PurchasingView = (props) => {
       width: "10vw",
       editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
-      filteredValue: filteredInfo?.po_number || null,
-      onFilter: (value, record) => record.po_number.replace(/^\W*POF/, "").includes(value),
-      sorter: (a, b) => {
-        const numericA = parseInt(a.po_number.replace(/^\W*POF/, ""), 10);
-        const numericB = parseInt(b.po_number.replace(/^\W*POF/, ""), 10);
 
-        return numericA - numericB;
+      filters: filterColumnOpt("po_number"),
+      filteredValue: filteredInfo.po_number || null,
+      onFilter: (value, record) => {
+        return value === "" ? record?.po_number === "" : record?.po_number.includes(value);
       },
-      sortOrder: sortedInfo.columnKey === "po_number" ? sortedInfo.order : null,
+
+      filterSearch: true,
       render: (_, row) => {
         if (editTableMode) {
           return row?.po_number || <Tag color="red">Please Fill PO Number</Tag>;
@@ -712,6 +832,9 @@ const PurchasingView = (props) => {
       dataIndex: "po_qty",
       key: "po_qty",
       // editable: editTableMode,
+      sorter: (a, b) => {
+        return moment(a.po_qty) - moment(b.po_qty);
+      },
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       render: (_, row) => {
         const poQty = utils.thousandSeparator(row.po_qty);
@@ -722,6 +845,9 @@ const PurchasingView = (props) => {
       title: t("Outs PR/PO"),
       dataIndex: "po_outs",
       key: "po_outs",
+      sorter: (a, b) => {
+        return moment(a.po_outs) - moment(b.po_outs);
+      },
       // editable: editTableMode,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       render: (_, row) => {
@@ -731,7 +857,12 @@ const PurchasingView = (props) => {
     {
       title: t("SKUCode"),
       dataIndex: "sku_code",
+
       key: "sku_code",
+      filters: filterColumnOpt("sku_code"),
+      filteredValue: filteredInfo?.sku_code || null,
+      onFilter: (value, record) => record?.sku_code.includes(value),
+      filterSearch: true,
       width: 150,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
@@ -739,11 +870,18 @@ const PurchasingView = (props) => {
       title: t("SKUName"),
       dataIndex: "sku_name",
       key: "sku_name",
+      filters: filterColumnOpt("sku_name"),
+      filteredValue: filteredInfo?.sku_name || null,
+      onFilter: (value, record) => record?.sku_name.includes(value),
+      filterSearch: true,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("qtyDelivery"),
       dataIndex: "qty_delivery",
+      sorter: (a, b) => {
+        return moment(a.qty_delivery) - moment(b.qty_delivery);
+      },
       key: "qty_delivery",
       render: (_, row) => {
         return utils.thousandSeparator(row.qty_delivery);
@@ -752,6 +890,9 @@ const PurchasingView = (props) => {
     {
       title: t("estDelivery"),
       dataIndex: "est_delivery",
+      sorter: (a, b) => {
+        return moment(a.est_delivery) - moment(b.est_delivery);
+      },
       key: "est_delivery",
       render: (_, row) => {
         return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
@@ -821,10 +962,13 @@ const PurchasingView = (props) => {
                   const otherParams = {
                     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
                     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                    supplier_id: suppliersSearch ?? null,
-                    user_id: usersSearch ?? null,
+                    supplier_id: filterValue?.supplier_id ?? null,
+                    user_id: filterValue?.user_id ?? null,
+                    io_filter: filterValue?.io_filter ?? null,
                     status: filterStatus,
+                    search_PO: filterValue?.search_PO,
                   };
+
                   fetchSummary(otherParams);
                 });
             },
@@ -1012,13 +1156,35 @@ const PurchasingView = (props) => {
   });
 
   const onSearch = (values) => {
-    if (values) {
-      if (values.search === "") {
-        setSearch(null);
-      } else {
-        setSearch(values.search);
-      }
+    if (!values) {
+      return;
     }
+    let newFilterValue = {};
+    if (values.supplier_list) {
+      newFilterValue.supplier_id = values.supplier_list;
+    }
+    if (values.user_filter) {
+      newFilterValue.user_id = values.user_filter;
+    }
+    if (values.io_filter) {
+      newFilterValue.io_filter = values.io_filter;
+    }
+    if (values.search_PO) {
+      newFilterValue.search_PO = values.search_PO;
+    }
+    setFilterValue(newFilterValue);
+    console.log("triggered11");
+    fetchData({
+      ...newFilterValue,
+      status: filterStatus ?? null,
+      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+    });
+    fetchSummary({
+      ...newFilterValue,
+      from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+      to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+    });
   };
 
   const renderTable = () => {
@@ -1071,10 +1237,13 @@ const PurchasingView = (props) => {
                                       constant.FORMAT_API_DATE,
                                     ),
                                     to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                                    supplier_id: suppliersSearch ?? null,
-                                    user_id: usersSearch ?? null,
+                                    supplier_id: filterValue?.supplier_id ?? null,
+                                    user_id: filterValue?.user_id ?? null,
+                                    io_filter: filterValue?.io_filter ?? null,
                                     status: filterStatus,
+                                    search_PO: filterValue?.search_PO,
                                   };
+
                                   fetchSummary(otherParams);
                                 });
                             },
@@ -1150,7 +1319,7 @@ const PurchasingView = (props) => {
               {...tableProps}
               dataSource={dataSource}
               components={components}
-              rowClassName={() => "editable-row"}
+              rowClassName={rowClassName}
               columns={columns}
               pagination={{
                 ...configs.TABLE_PAGINATION_SINGLEPAGE,
@@ -1222,19 +1391,6 @@ const PurchasingView = (props) => {
         </Link>,
         "offer@create",
       )}
-      // btnAction={utils.renderWithPermission(
-      //   userInfo.permissions,
-      //   <Button
-      //     size="small"
-      //     onClick={() => {
-      //       setModalExportShow(true);
-      //     }}
-      //     disabled
-      //   >
-      //     {t("exportXLSX")} ???
-      //   </Button>,
-      //   "export@xlsx",
-      // )}
       breadcrumbs={[
         {
           text: t("Procurement"),
@@ -1242,18 +1398,6 @@ const PurchasingView = (props) => {
         },
       ]}
     >
-      <ModalImportCSV
-        visible={modalImportCSVShow}
-        onCancel={() => setModalImportCSVShow(false)}
-        setPageLoading={setPageLoading}
-        onSuccess={() => {
-          loadOffers();
-          setModalImportCSVShow(false);
-          message.success(
-            `${t("new")} ${t("schedule")} ${t("toastSuffixSuccess")} ${t("toastImported")}`,
-          );
-        }}
-      />
       <ModalSplitSchedule
         visible={modalSplitScheduleShow}
         onCancel={() => {
@@ -1263,6 +1407,17 @@ const PurchasingView = (props) => {
           setModalSplitScheduleShow(false);
           message.success("Offer Splitted Successfully");
           loadOffers();
+          const otherParams = {
+            from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+            to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            status: filterStatus,
+            search_PO: filterValue?.search_PO,
+          };
+
+          fetchSummary(otherParams);
         }}
         data={modalSplitScheduleData}
       />
@@ -1275,6 +1430,17 @@ const PurchasingView = (props) => {
           setModalCreateShow(false);
           message.success("Success Create Data");
           loadOffers();
+          const otherParams = {
+            from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+            to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            status: filterStatus,
+            search_PO: filterValue?.search_PO,
+          };
+
+          fetchSummary(otherParams);
         }}
       />
       <ModalEdit
@@ -1286,6 +1452,17 @@ const PurchasingView = (props) => {
           setModalEditShow(false);
           message.success("Success Edit Data");
           loadOffers();
+          const otherParams = {
+            from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+            to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            status: filterStatus,
+            search_PO: filterValue?.search_PO,
+          };
+
+          fetchSummary(otherParams);
         }}
         id={modalEditData}
       />
@@ -1300,67 +1477,112 @@ const PurchasingView = (props) => {
             `${t("schedule")} ${"retur"} ${t("toastSuffixSuccess")} ${t("toastImported")}`,
           );
           loadOffers();
+          const otherParams = {
+            from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
+            to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
+            supplier_id: filterValue?.supplier_id ?? null,
+            user_id: filterValue?.user_id ?? null,
+            io_filter: filterValue?.io_filter ?? null,
+            status: filterStatus,
+            search_PO: filterValue?.search_PO,
+          };
+
+          fetchSummary(otherParams);
         }}
         data={modalReturScheduleData}
       />
 
       <SyncOverlay loading={pageLoading} />
-      <Form className="mb-2 w-100" form={form} onFinish={onSearch}>
-        <Row gutter={12}>
-          <Col xs={24} lg={9} xl={7}>
-            <Form.Item className="mb-2" name="date" wrapperCol={{ flex: "auto" }}>
-              <DatePicker.RangePicker
-                defaultValue={dateRange}
-                value={dateRange}
-                style={{ width: "100%" }}
-                {...utils.FORM_RANGEPICKER_PROPS}
-                onChange={(dates, dateStrings) => {
-                  setDateRange(dates);
-                }}
-                allowClear={false}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12} xl={4}>
-            <Form.Item name="supplier_list" className="mb-2">
-              <Select
-                showSearch
-                // mode="multiple"
-                placeholder="Select Supplier"
-                optionFilterProp="children"
-                onChange={onChangeSupplierList}
-                style={{ width: "100%" }}
-                filterOption={filterOption}
-                options={suppliers}
-                defaultValue={null}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12} xl={4}>
-            <Form.Item name="user_list" className="mb-2">
-              <Select
-                showSearch
-                placeholder="Select User"
-                optionFilterProp="children"
-                onChange={onChangeUserList}
-                style={{ width: "100%" }}
-                filterOption={filterOption}
-                options={purchasing}
-                defaultValue={userInfo.user_name}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} lg={12} xl={4}>
-            <Button type="primary" onClick={onResetFilter}>
-              Reset Filter
-            </Button>
-          </Col>
-        </Row>
-      </Form>
-      {console.log(previewRowChecked)}
-      <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
-        {tabPanes}
-      </Tabs>
+      <Row gutter={16}>
+        <Col xs={24} lg={24} xl={24}>
+          <Card size="small">
+            <SectionHeading title={"Filter"} withDivider />
+            <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Form.Item
+                    label="Date Range"
+                    className="mb-2"
+                    name="date"
+                    wrapperCol={{ flex: "auto" }}
+                  >
+                    <DatePicker.RangePicker
+                      defaultValue={dateRange}
+                      value={dateRange}
+                      style={{ width: "100%" }}
+                      {...utils.FORM_RANGEPICKER_PROPS}
+                      onChange={(dates, dateStrings) => {
+                        setDateRange(dates);
+                        const otherParams = {
+                          from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
+                          to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
+                          supplier_id: filterValue?.supplier_id ?? null,
+                          user_id: filterValue?.user_id ?? null,
+                          io_filter: filterValue?.io_filter ?? null,
+                          status: filterStatus,
+                          search_PO: filterValue?.search_PO,
+                        };
+                        console.log("triggered4");
+                        fetchSummary(otherParams);
+                      }}
+                      allowClear={false}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Buyer" name="user_filter" className="mb-2">
+                    <Select
+                      showSearch
+                      placeholder="Select Buyer"
+                      optionFilterProp="children"
+                      // onChange={onChangeUserList}
+                      style={{ width: "100%" }}
+                      filterOption={filterOption}
+                      options={purchasing}
+                      defaultValue={userInfo.user_name}
+                    />
+                  </Form.Item>
+                </Col>
+                {/* <Col span={12}>
+                  <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">
+                    <Input placeholder={t("searchPO")} />
+                  </Form.Item>
+                </Col> */}
+              </Row>
+              <Row gutter={8}>
+                <Col span={12}>
+                  <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
+                    <Select
+                      showSearch
+                      placeholder="Select I/O"
+                      optionFilterProp="children"
+                      // onChange={onChangeSupplierList}
+                      style={{ width: "100%" }}
+                      filterOption={filterOption}
+                      options={constant.WAREHOUSE_LIST}
+                      defaultValue={null}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={8}></Row>
+              <Form.Item className="mb-2">
+                <Button type="primary" htmlType="submit">
+                  {t("applyFilter")}
+                </Button>{" "}
+                <Button type="" onClick={onResetFilter}>
+                  Reset Filter
+                </Button>
+              </Form.Item>
+            </Form>
+          </Card>
+        </Col>
+        <Col xs={24} lg={24} xl={24}>
+          <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
+            {tabPanes}
+          </Tabs>
+        </Col>
+      </Row>
     </PageContainer>
   );
 };

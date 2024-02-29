@@ -22,11 +22,12 @@ export const isEmptyObj = (obj) => {
   );
 };
 
+export const isEmptyStr = (x) => {
+  return x === null || x === undefined || x === "";
+};
+
 export const isNull = (x) => {
-  if (!x && x !== 0 && x !== "0" && x !== false && x !== "") {
-    return true;
-  }
-  return false;
+  return !x || x === 0 || x === "0" || x === false || x === "";
 };
 
 // list is react select obj list

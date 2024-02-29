@@ -183,15 +183,15 @@ export const UserEdit = async (req, res) => {
 export const UserDelete = async (req, res) => {
   const userId = getUserID(req);
   try {
-    const { employee_id } = req.params;
+    const { user_id } = req.params;
     const user = await db.USERS.findOne({
-      where: { employee_id },
+      where: { user_id },
     });
     if (!user) {
       return errorResponse(req, res, "User not found");
     }
     const payloadDeletedAt = { deleted_at: new Date(), deleted_by_id: userId };
-    await user.update(payloadDeletedAt, { where: { employee_id } });
+    await user.update(payloadDeletedAt, { where: { user_id } });
     return successResponse(req, res, "User deleted successfully");
   } catch (error) {
     return errorResponse(req, res, error.message);

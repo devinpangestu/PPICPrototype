@@ -13,6 +13,8 @@ export const en = {
     revisedDate: "Revised Date",
     supplierQty: "Supplier Qty",
     supplierDate: "Supplier Date",
+    buyerName: "Buyer Name",
+
     recommendation: "Recommend",
     yes: "Yes",
     no: "No",
@@ -50,6 +52,7 @@ export const en = {
     name: "Name",
     role: "Role",
     action: "Action",
+    oracleUsername:"Oracle Username",
 
     // supplier
     supplierData: "Supplier Data",

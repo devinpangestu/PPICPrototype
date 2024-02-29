@@ -24,7 +24,7 @@ const CacheBuster = (props) => {
   const [isLatestVersion, setIsLatestVersion] = useState(null);
   const refreshCacheAndReload = () => {
     console.log("Clearing cache and hard reloading...");
-    
+
     // if (caches) {
     //   // Service worker cache should be cleared with caches.delete()
     //   caches.keys().then(function (names) {
@@ -54,6 +54,7 @@ const CacheBuster = (props) => {
           setLoading(false);
           setIsLatestVersion(true);
           localStorage.setItem(constant.CLIENT_VERSION, latestVersion);
+          localStorage.setItem(constant.API_TIMEOUT, meta.VITE_API_TIMEOUT);
         }
       });
   }, []);

@@ -27,7 +27,7 @@ import constant from "constant";
 import ModalSplitSchedule from "./modal/ModalSplitSchedule";
 import handler from "handler";
 import ModalEditAndSend from "./modal/ModalEditAndSend";
-import { authorizationCheck, isMobile } from "utils/auth";
+import { authorizationCheck, isMobile, passwordChangedCheck } from "utils/auth";
 import { usePageStore } from "state/pageState";
 
 const SupplierView = (props) => {
@@ -55,6 +55,7 @@ const SupplierView = (props) => {
   useEffect(() => {
     loadOffers();
     authorizationCheck(userInfo);
+    passwordChangedCheck(userInfo);
   }, []);
 
   const handleCheckboxChange = (index, initialChecked) => {
@@ -66,9 +67,7 @@ const SupplierView = (props) => {
       // If the title checkbox is checked, update all checkboxes
 
       // If the rows are merged, update the next row's checkbox state
-      if (arrayOfMerge[index]) {
-        updatedPreviewRowChecked[index + 1] = !updatedPreviewRowChecked[index + 1];
-      }
+
       if (initialChecked) {
         return updatedPreviewRowChecked;
       }
@@ -98,6 +97,7 @@ const SupplierView = (props) => {
                 nextRow &&
                 currRow.supplier_id === nextRow.supplier_id &&
                 currRow.po_number === nextRow.po_number &&
+                currRow.flag_status === nextRow.flag_status &&
                 currRow.sku_code === nextRow.sku_code;
               return shouldMerge;
             }),
@@ -452,7 +452,6 @@ const SupplierView = (props) => {
               className="mr-1 mb-1"
               size="small"
               onClick={() => {
-                
                 setPageLoading(true);
                 api.suppliers
                   .getAllPODetails(row.po_number, row.sku_code)
@@ -568,7 +567,7 @@ const SupplierView = (props) => {
                       setPageLoading(true);
                       const data = offers.filter((offer, index) => previewRowChecked[index]);
                       api.suppliers
-                        .confirmSelected(data) 
+                        .confirmSelected(data)
                         .then((res) => {
                           message.success("Success");
                         })

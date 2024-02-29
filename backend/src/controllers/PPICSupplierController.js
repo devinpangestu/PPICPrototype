@@ -8,6 +8,7 @@ import env from "../utils/validateEnv.js";
 import jwt from "jsonwebtoken";
 import { constant } from "../constant/index.js";
 import { sendEmailVerification } from "../utils/emailTemplate/sendEmailVerification.js";
+import bcrypt from "bcrypt";
 
 export const PPICSupplierList = async (req, res) => {
   try {
@@ -99,6 +100,7 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
     const user = await db.USERS.findOne({
       where: {
         email: supplier.email,
+        deleted_at: null,
       },
     });
     if (user) {
@@ -117,17 +119,8 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
       { dbTransaction }
     );
 
-    // await db.USERS.create({
-    //   email: supplier.email,
-    //   user_id: supplier.email,
-    //   password: false,
-    //   name: `${supplier.name}`,
-    //   supplier_id: supplier.ref_id,
-    //   role_id: 4,
-    //   created_at: new Date(),
-    //   updated_at: new Date(),
-    //   created_by_id: userId,
-    // });
+    const passwordToCreate = uniqueId(8);
+    const newPasswordToHash = await bcrypt.hash(passwordToCreate, 4);
 
     const token = jwt.sign(
       { email: supplier.email, id: supplier.ref_id },
@@ -136,18 +129,7 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
         expiresIn: "1h",
       }
     );
-    console.log(148);
-    let tokenMail = await db.TOKEN.create({
-      id: uniqueId(),
-      user_id: supplier.ref_id,
-      token: crypto.randomBytes(32).toString("hex"),
-      type: "email-verification",
-      expired_at: new Date(Date.now() + 60 * 60 * 1000),
-    });
-    console.log(156);
-    console.log(token);
-    const url = `${env.BASE_URL_CLIENT}/user/${tokenMail.id}/verify/${tokenMail.token}`;
-    console.log(159);
+
     const currentTime = Date.now();
     const lastSentTime = token.lastSentAt;
 
@@ -166,10 +148,21 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
     //TODO : ADD SEND EMAIL
     await sendEmailVerification(
       supplier.email,
-      `Verify your email address for ${supplier.name}`,
-      url
+      `Welcoming ${supplier.name}!`,
+      passwordToCreate
     );
-
+    await db.USERS.create({
+      email: supplier.email,
+      user_id: supplier.email,
+      password: newPasswordToHash,
+      name: `${supplier.name}`,
+      supplier_id: supplier.ref_id,
+      role_id: 4,
+      created_at: new Date(),
+      updated_at: new Date(),
+      created_by_id: userId,
+      last_used_password: JSON.stringify([`${newPasswordToHash}`]),
+    });
     return successResponse(
       req,
       res,
@@ -997,7 +990,7 @@ export const refreshOracle = async (transaction) => {
       type: Sequelize.QueryTypes.SELECT,
       transaction,
     });
-    const oracleDataSplitted = oracleDataMerge.map((supplier) => {
+    const oracleDataSplitted = oracleDataMerge.flatMap((supplier) => {
       const emailList =
         supplier.email.split(/;\s*|\s+/).map((email) => email.trim()) || [];
       return emailList.map((email) => ({
@@ -1006,6 +999,7 @@ export const refreshOracle = async (transaction) => {
       }));
     });
     const MSSQLDataSplitted = await db.SUPPLIERS.findAll({
+      raw: true,
       transaction,
     });
     const MSSQLDataEmailMerge = MSSQLDataSplitted.map((supplier) => {
@@ -1024,170 +1018,48 @@ export const refreshOracle = async (transaction) => {
       return supplier; // Return the modified supplier
     });
 
-    // Step 1: Insert
-    const insertPromises = [];
-    oracleDataSplitted.forEach((oracleSupplier) => {
-      const existingSupplier = MSSQLDataSplitted.find(
-        (sqlSupplier) => sqlSupplier.name === oracleSupplier.name
-      );
+    const toInsert = [];
+    const toDelete = [];
 
-      if (!existingSupplier) {
-        // Insert into MSSQL
-        insertPromises.push(
-          db.SUPPLIERS.create(oracleSupplier, { transaction })
-        );
+    //first init
+    if (MSSQLDataSplitted.length === 0 && MSSQLDataEmailMerge.length === 0) {
+      for (let key in oracleDataSplitted) {
+        await db.SUPPLIERS.create(oracleDataSplitted[key], { transaction });
       }
-    });
-
-    await Promise.all(insertPromises);
-
-    // Step 2: Update
-    const updatePromises = [];
-    MSSQLDataSplitted.forEach((sqlSupplier) => {
-      const oracleSupplier = oracleDataSplitted.find(
-        (oracleSupplier) => oracleSupplier.name === sqlSupplier.name
-      );
-
-      if (oracleSupplier && oracleSupplier.email !== sqlSupplier.email) {
-        // Update email in MSSQL
-        updatePromises.push(
-          db.SUPPLIERS.update(
-            { email: oracleSupplier.email },
-            { where: { id: sqlSupplier.id }, transaction }
-          )
+    } else {
+      for (let key in oracleDataSplitted) {
+        const existingSupplier = MSSQLDataSplitted.filter(
+          (sqlSupplier) =>
+            sqlSupplier.name === oracleDataSplitted[key].name &&
+            sqlSupplier.email === oracleDataSplitted[key].email
         );
+        if (!existingSupplier) {
+          toInsert.push(oracleDataSplitted[key]);
+        }
       }
-    });
-
-    await Promise.all(updatePromises);
-
-    // Step 3: Delete
-    const deletePromises = [];
-    MSSQLDataSplitted.forEach((sqlSupplier) => {
-      const oracleSupplier = oracleDataSplitted.find(
-        (oracleSupplier) => oracleSupplier.name === sqlSupplier.name
-      );
-
-      if (!oracleSupplier) {
-        // Delete from MSSQL
-        deletePromises.push(
-          db.SUPPLIERS.destroy({ where: { id: sqlSupplier.id }, transaction })
+      for (let key in MSSQLDataSplitted) {
+        const existingSupplier = oracleDataSplitted.filter(
+          (sqlSupplier) =>
+            sqlSupplier.name === MSSQLDataSplitted[key].name &&
+            sqlSupplier.email === MSSQLDataSplitted[key].email
         );
+        if (!existingSupplier) {
+          toDelete.push({ id: MSSQLDataSplitted[key].id });
+        }
       }
-    });
+    }
 
-    await Promise.all(deletePromises);
-
-    // Create a copy of the existing suppliers array
-    // const existingSuppliersCopy = MSSQLDataSplitted.map((existingSupplier) => ({
-    //   ...existingSupplier.toJSON(),
-    // }));
-
-    // // Merge the email before update delete and insert
-    // existingSuppliersCopy.forEach((existingSupplier) => {
-    //   const emailList =
-    //     existingSupplier.email.split(/;\s*|\s+/).map((email) => email.trim()) ||
-    //     [];
-    //   existingSupplier.mergedEmail = emailList.join(";");
-    // });
-
-    // // Step 2: Identify records to be updated, inserted, and deleted
-    // const toUpdate = [];
-    // const toUpdateNew = [];
-    // const toInsert = [];
-    // const toInsertNew = [];
-    // const toDelete = [];
-
-    // // Iterate through existing suppliers copy
-    // existingSuppliersCopy.forEach((existingSupplier) => {
-    //   const matchingSupplier = oracleDataMerge.find((newSupplier) =>
-    //     areSuppliersEqual(existingSupplier, newSupplier)
-    //   );
-
-    //   if (matchingSupplier) {
-    //     // Matching record found, update it
-    //     toUpdate.push({
-    //       ...existingSupplier,
-    //       ...matchingSupplier,
-    //       id: existingSupplier.id,
-    //     });
-
-    //     // Remove the matching supplier from the results
-    //     oracleDataMerge.splice(oracleDataMerge.indexOf(matchingSupplier), 1);
-    //   } else {
-    //     // No matching record found, mark it for deletion
-    //     toDelete.push(existingSupplier.id);
-    //   }
-    // });
-
-    // // Insert the remaining suppliers
-    // oracleDataMerge.forEach((newSupplier) => {
-    //   const { ref_id, supplier_number, vendor_site_code, name } = newSupplier;
-    //   const emailList =
-    //     newSupplier.email.split(/;\s*|\s+/).map((email) => email.trim()) || [];
-
-    //   emailList.forEach((email) => {
-    //     const notExistInExistingSuppliers = !MSSQLDataSplitted.some(
-    //       (es) => areSuppliersEqual(es, newSupplier) && es.mergedEmail === email
-    //     );
-
-    //     if (notExistInExistingSuppliers) {
-    //       toInsert.push({
-    //         ...newSupplier,
-    //         email,
-    //         created_at: new Date(),
-    //       });
-    //     }
-    //   });
-    // });
-
-    // // Step 3: Perform updates, insertions, and deletions
-
-    // // Delete records
-    // await db.SUPPLIERS.destroy({
-    //   where: { id: toDelete },
-    //   transaction,
-    // });
-
-    // // Update records
-    // // and split the email
-    // toUpdate.forEach((newSupplier) => {
-    //   const emailList =
-    //     newSupplier.email.split(/;\s*|\s+/).map((email) => email.trim()) || [];
-    //   console.log(emailList, "emailList");
-    //   emailList.forEach((email) => {
-    //     const notExistInExistingSuppliers = !MSSQLDataSplitted.some(
-    //       (es) => areSuppliersEqual(es, newSupplier) && es.mergedEmail === email
-    //     );
-
-    //     if (notExistInExistingSuppliers) {
-    //       toInsertNew.push({
-    //         ...newSupplier,
-    //         email,
-    //         created_at: new Date(),
-    //       });
-    //     }
-    //   });
-    // });
-    // console.log(toInsertNew, "toInsertNew");
-    // // Insert records
-    // await db.SUPPLIERS.bulkCreate(toInsertNew, { transaction });
-
-    // for (const updatedSupplier of toUpdateNew) {
-    //   await db.SUPPLIERS.update(updatedSupplier, {
-    //     where: { id: updatedSupplier.id },
-    //     transaction,
-    //   });
-    // }
-
-    // console.log(toInsertNew, "toInsertNew");
-    // console.log(
-    //   toUpdate.filter((up) => {
-    //     return up.name === "KATI KARTIKA MURNI, PT";
-    //   }),
-    //   "Updated Suppliers"
-    // );
-    // console.log(toDelete, "Deleted Suppliers");
+    for (let key in toInsert) {
+      await db.SUPPLIERS.create(toInsert[key], { transaction });
+    }
+    for (let key in toDelete) {
+      await db.SUPPLIERS.destroy({
+        where: {
+          id: toDelete[key].id,
+        },
+        transaction,
+      });
+    }
 
     return true;
   } catch (error) {

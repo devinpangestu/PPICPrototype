@@ -13,7 +13,6 @@ import constant from "constant";
 const ChangePassword = (props) => {
   const [t] = useTranslation();
   const [form] = Form.useForm();
-
   const [pageLoading, setPageLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [password, setPassword] = useState("");
@@ -21,7 +20,9 @@ const ChangePassword = (props) => {
 
   const validatePassword = () => {
     // Check if passwords match
+
     const passwordsMatch = password === confirmPassword;
+
     if (!passwordsMatch) {
       // Update errors state
       setErrors({
@@ -30,16 +31,15 @@ const ChangePassword = (props) => {
       return false; // Passwords do not match, stop further validation
     } else {
       // Define your password validation criteria
-      const regexPattern = /^(?=.*[A-Z])(?=.*\d)(?!.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+      const regexPattern = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&-_])[A-Za-z\d@$!%*?&-_]{8,}$/;
 
       // Perform validation
       const isValid = regexPattern.test(password);
-
       // Update errors state for other password criteria
       setErrors({
         capitalLetter: !/(?=.*[A-Z])/.test(password),
         digit: !/(?=.*\d)/.test(password),
-        specialCharacter: /[@$!%*?&]/.test(password),
+        specialCharacter: !/[@$!%*?&-_]/.test(password),
         length: password.length < 8,
         confirmPassword: !passwordsMatch,
       });
@@ -91,6 +91,7 @@ const ChangePassword = (props) => {
           });
       } else {
         // Passwords are invalid, display error messages
+        utils.swal.Error({ msg: "Passwords are invalid. Please correct errors." });
         console.log("Passwords are invalid. Please correct errors.");
         setPageLoading(false); // Ensure setPageLoading(false) is called in the else block
       }
@@ -117,6 +118,16 @@ const ChangePassword = (props) => {
             onFinish={handleOnSubmit}
             onFinishFailed={handleOnSubmitFailed}
             autoComplete="off"
+            onPaste={(e) => {
+              e.preventDefault();
+              alert("Geez! You are not allowed to paste here.");
+              return false;
+            }}
+            onCopy={(e) => {
+              e.preventDefault();
+              alert("Geez! You are not allowed to Copy here.");
+              return false;
+            }}
           >
             <Form.Item
               label={t("oldPassword")}
@@ -168,9 +179,10 @@ const ChangePassword = (props) => {
                 onChange={handleConfirmPasswordChange}
               />
             </Form.Item>
+            {errors.confirmPassword && <p>Passwords do not match.</p>}
             {errors.capitalLetter && <p>Must contain at least one capital letter.</p>}
             {errors.digit && <p>Must contain at least one digit.</p>}
-            {errors.specialCharacter && <p>No special characters allowed.</p>}
+            {errors.specialCharacter && <p>Special characters #%^+= not allowed.</p>}
             {errors.length && <p>Must be at least 8 characters long.</p>}
             <Form.Item wrapperCol={{ span: 24 }} className="text-right">
               <Button type="primary" htmlType="submit">

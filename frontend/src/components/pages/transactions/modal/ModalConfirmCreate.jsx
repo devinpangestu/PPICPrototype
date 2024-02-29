@@ -11,11 +11,6 @@ const ModalConfirmCreate = (props) => {
 
   if (!values) return null;
 
-  const findLabelFromValue = (value, options) => {
-    const option = options.find((item) => item.value === value);
-    return option ? option.label : value;
-  };
-
   return (
     <Modal
       className="modal-compact"
@@ -42,22 +37,6 @@ const ModalConfirmCreate = (props) => {
             {values.line_num && <Input value={values.line_num} bordered={false} />}
           </Form.Item>
         )}
-        <Form.Item label={t("I/O Pabrik")} className="mb-0">
-          {values.io_filter && (
-            <Input
-              value={findLabelFromValue(values.io_filter, constant.WAREHOUSE_LIST)}
-              bordered={false}
-            />
-          )}
-        </Form.Item>
-        <Form.Item label={t("Item Category")} className="mb-0">
-          {values.category_filter && (
-            <Input
-              value={findLabelFromValue(values.category_filter, constant.PPIC_CATEGORY_LIST)}
-              bordered={false}
-            />
-          )}
-        </Form.Item>
         <Form.Item label={t("Supplier")} className="mb-0">
           {values.supplier_name && <Input value={values.supplier_name} bordered={false} />}
         </Form.Item>
@@ -87,9 +66,6 @@ const ModalConfirmCreate = (props) => {
         </Form.Item>
         <Form.Item label={t("Buyer Name")} className="mb-0">
           {values.buyer_name && <Input value={values.buyer_name} bordered={false} />}
-        </Form.Item>
-        <Form.Item label={t("Notes")} className="mb-0">
-          {values.notes_ppic && <Input value={values.notes_ppic} bordered={false} />}
         </Form.Item>
       </Form>
     </Modal>

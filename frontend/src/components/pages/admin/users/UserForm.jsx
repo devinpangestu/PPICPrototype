@@ -14,7 +14,7 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
 
   const [pageLoading, setPageLoading] = useState(false);
   const [roles, setRoles] = useState([]);
-
+  const [purchasingValue, setPurchasingValue] = useState(false);
   useEffect(() => {
     handler.getRoles(setPageLoading, setRoles);
   }, []);
@@ -163,8 +163,28 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
                 },
               ]}
             >
-              <Select placeholder={`${t("select")} ${t("role")}`} options={roles} />
+              <Select
+                placeholder={`${t("select")} ${t("role")}`}
+                options={roles}
+                onChange={(value) => {
+                  return value === constant.ROLE_PURCHASING;
+                }}
+              />
             </Form.Item>
+            {purchasingValue && (
+              <Form.Item
+                label="Oracle Username"
+                name="oracle_username"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("select")} ${t("oracleUsername")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("oracleUsername")}`} />
+              </Form.Item>
+            )}
             <Form.Item wrapperCol={{ span: 24 }} className="mb-0 text-right">
               <Button type="secondary" className="mr-2" onClick={onCancel}>
                 {t("cancel")}

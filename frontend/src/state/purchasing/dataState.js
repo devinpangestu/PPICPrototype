@@ -27,6 +27,9 @@ export const useDataStore = create((set) => ({
   usersSearch: [],
   setUsersSearch: (data) => set({ usersSearch: data }),
 
+  filterValue: {},
+  setFilterValue: (newFilterValue) => set({ filterValue: newFilterValue }),
+
   editTableMode: false,
   setEditTableMode: (mode) => set({ editTableMode: mode }),
   search: null,
@@ -41,7 +44,7 @@ export const useDataStore = create((set) => ({
   setOldDataSource: (data) => set({ oldDataSource: data }),
   editedData: [],
   setEditedData: (data) => set({ editedData: data }),
-  
+
   cancelClicked: false,
   setCancelClicked: (clicked) => set({ cancelClicked: clicked }),
   filteredInfo: {},

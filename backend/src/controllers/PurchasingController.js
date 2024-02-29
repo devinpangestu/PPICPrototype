@@ -14,10 +14,12 @@ import {
 } from "../utils/parsing.js";
 import { getOutsQtyEachPOSKU } from "../utils/checker.js";
 import { filterDoubleFindCount } from "../utils/filter.js";
+import { constant } from "../constant/index.js";
 
 export const PurchasingScheduleSummary = async (req, res) => {
   try {
-    const { from_date, to_date, user_id, supplier_id, status } = req.query;
+    const { from_date, to_date, user_id, io_filter, supplier_id, status } =
+      req.query;
     const userId = getUserID(req);
     if (!userId) {
       return errorResponse(
@@ -31,7 +33,10 @@ export const PurchasingScheduleSummary = async (req, res) => {
     };
 
     if (user_id) {
-      whereClause[Op.and].push({ created_by_id: user_id });
+      whereClause[Op.and].push({ buyer_id: user_id });
+    }
+    if (io_filter) {
+      whereClause[Op.and].push({ io_filter });
     }
 
     if (supplier_id) {
@@ -74,8 +79,16 @@ export const PurchasingScheduleSummary = async (req, res) => {
 };
 
 export const PurchasingScheduleList = async (req, res) => {
+  const {
+    from_date,
+    to_date,
+    status,
+    supplier_id,
+    io_filter,
+    user_id,
+    searchPO,
+  } = req.query;
   try {
-    const { from_date, to_date, status, supplier_id, user_id } = req.query;
     const customOrder = (column, values, direction) => {
       let orderByClause = "CASE ";
       for (let index = 0; index < values.length; index++) {
@@ -128,7 +141,10 @@ export const PurchasingScheduleList = async (req, res) => {
       whereClause[Op.and].push({ supplier_id: supplier_id });
     }
     if (user_id) {
-      whereClause[Op.and].push({ created_by_id: user_id });
+      whereClause[Op.and].push({ buyer_id: user_id });
+    }
+    if (io_filter) {
+      whereClause[Op.and].push({ io_filter });
     }
     const data = await db.OFFERS.findAndCountAll({
       include: [
@@ -525,13 +541,30 @@ export const PurchasingScheduleRetur = async (req, res) => {
         "Data dengan id tersebut tidak ditemukan atau sudah dihapus"
       );
     }
+
+    const getExistingNotes = JSON.parse(checkId.notes);
+    const getExistingHistory = JSON.parse(checkId.history);
+
     const payload = {
       flag_status: "C", //status for get retur from procurement to ppic
       notes: JSON.stringify({
-        retur_proc_ppic: notes_purchasing,
-        updated_by: userName,
-        updated_at: new Date(),
+        ...getExistingNotes,
+        retur: {
+          notes: notes_purchasing,
+          created_at: new Date(),
+          created_by: userName,
+        },
       }),
+      history: JSON.stringify([
+        ...(getExistingHistory || []),
+        {
+          detail: `${moment().format(
+            constant.FORMAT_DISPLAY_DATETIME
+          )} Retur Schedule by ${userName}`,
+          created_at: new Date(),
+          created_by: userName,
+        },
+      ]),
       updated_by_id: userId,
       updated_at: new Date(),
     };
@@ -572,8 +605,26 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
       let rowToUpdate = rq_body[key];
       //check id for supplier
       const id = rowToUpdate.id;
+      const getExistingHistory = JSON.parse(rowToUpdate.history);
+
       await db.OFFERS.update(
-        { flag_status: "E", updated_by_id: userId },
+        {
+          flag_status: "E",
+          updated_by_id: userId,
+          updated_at: new Date(),
+          history: JSON.stringify([
+            ...(getExistingHistory || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Schedule sent to ${
+                rowToUpdate?.supplier?.name
+              } by ${userName}`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
+        },
         {
           where: { id },
         },
@@ -605,6 +656,13 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherSplit = await db.OFFERS.findAll({
       where: {
@@ -618,6 +676,16 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
       await db.OFFERS.update(
         {
           flag_status: "G",
+          history: JSON.stringify([
+            ...(checkAnotherSplit[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Split Schedule Request Accepted by ${userName} and forwarded to PPIC`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           updated_by_id: userId,
           updated_at: new Date(),
         },
@@ -648,6 +716,13 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherSplit = await db.OFFERS.findAll({
       where: {
@@ -659,6 +734,18 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
     await db.OFFERS.update(
       {
         flag_status: "E",
+        history: JSON.stringify([
+          ...(checkTheCurrentID.history || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Split Schedule Request Rejected by ${userName} and sent back to Supplier ${
+              checkTheCurrentID?.supplier?.name
+            }`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
         is_split: false,
         updated_by_id: userId,
         updated_at: new Date(),
@@ -699,6 +786,13 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherEditedOffer = await db.OFFERS.findAll({
       where: {
@@ -713,6 +807,16 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
       await db.OFFERS.update(
         {
           flag_status: "G",
+          history: JSON.stringify([
+            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Edit Schedule Request Accepted by ${userName} and forwarded to PPIC`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           updated_by_id: userId,
           updated_at: new Date(),
         },
@@ -744,6 +848,13 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherEditedOffer = await db.OFFERS.findAll({
       where: {
@@ -759,6 +870,18 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
       await db.OFFERS.update(
         {
           flag_status: "E",
+          history: JSON.stringify([
+            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Edit Schedule Request Rejected by ${userName} and sent back to Supplier ${
+                checkTheCurrentID?.supplier?.name
+              }`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           is_edit: false,
           updated_by_id: userId,
           updated_at: new Date(),

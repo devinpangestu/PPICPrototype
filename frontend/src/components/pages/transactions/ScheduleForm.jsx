@@ -74,6 +74,8 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
           form.setFieldsValue({
             submission_date: moment(res.submission_date),
             supplier_name: parseInt(res.supplier.ref_id),
+            io_filter: res.io_filter,
+            category_filter: res.category_filter,
             po_number: res.po_number,
             po_qty: parseInt(res.po_qty),
             po_outs: parseInt(res.po_outs),
@@ -151,7 +153,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         });
     } else {
       if (autoFill) {
-        console.log(values);
         const dataToShow = await api.ppic
           .getPODetail(modalConfirmObj)
           .then(function (response) {
@@ -168,7 +169,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
             modalConfirmObj.qty_delivery = parseInt(values.qty_delivery);
             modalConfirmObj.est_delivery = moment(values.est_delivery);
             modalConfirmObj.buyer_name = response.data.rs_body.USER_NAME;
-            modalConfirmObj.notes_ppic = values.notes;
             return modalConfirmObj;
           })
           .catch(function (error) {
@@ -185,6 +185,8 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
       } else {
         const dataToShow = {};
         dataToShow.submission_date = moment(values.submission_date);
+        dataToShow.io_filter = values.io_filter;
+        dataToShow.category_filter = values.category_filter;
         dataToShow.po_number = values.po_number;
         dataToShow.po_qty = parseInt(values.po_qty);
         dataToShow.po_outs = parseInt(values.po_outs);
@@ -193,7 +195,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         dataToShow.supplier_name = values.supplier_name;
         dataToShow.qty_delivery = parseInt(values.qty_delivery);
         dataToShow.est_delivery = moment(values.est_delivery);
-        dataToShow.notes_ppic = values.notes;
         setModalConfirmCreateData(dataToShow);
         setModalConfirmCreateShow(true);
       }
@@ -218,9 +219,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
       />
       <SyncOverlay loading={pageLoading} />
       <Form form={form} onFinish={handleOnSubmit} autoComplete="off" layout="vertical">
-        <Form.Item name="auto_fill" label={t("autoFill")} valuePropName="checked">
-          <Switch onChange={handleSwitchChange} />
-        </Form.Item>
         {autoFill ? (
           <>
             <Form.Item
@@ -239,57 +237,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                 {...utils.FORM_DATEPICKER_PROPS}
               />
             </Form.Item>
-            <Form.Item
-              name="io_filter"
-              label={t("I/O Pabrik")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("I/O Pabrik")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("I/O Pabrik")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={constant.WAREHOUSE_LIST}
-              />
-            </Form.Item>
-            <Form.Item
-              name="category_filter"
-              label={t("Item Category")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("Item Category")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("Item Category")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={constant.PPIC_CATEGORY_LIST}
-              />
-            </Form.Item>
-            <Form.Item
-              name="supplier_name"
-              label={t("supplierName")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("supplierName")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("supplier")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={suppliers}
-              />
-            </Form.Item>
+
             <Form.Item
               label={t("No PR/PO")}
               name="po_number"
@@ -337,21 +285,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                 allowClear={false}
                 inputReadOnly={true}
                 {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
-            <Form.Item
-              name={"notes"}
-              label={t("notes")}
-              rules={[
-                {
-                  message: `${t("input")} ${t("notes")}`,
-                },
-              ]}
-            >
-              <Input.TextArea
-                placeholder={`${t("input")} ${t("notes")}`}
-                rows={constant.FORM_TEXT_AREA_ROW}
-                maxLength={constant.FORM_TEXT_AREA_LIMIT}
               />
             </Form.Item>
             <Form.Item className="mb-0 text-right">
@@ -518,21 +451,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                 allowClear={false}
                 inputReadOnly={true}
                 {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
-            <Form.Item
-              name={"notes"}
-              label={t("notes")}
-              rules={[
-                {
-                  message: `${t("input")} ${t("notes")}`,
-                },
-              ]}
-            >
-              <Input.TextArea
-                placeholder={`${t("input")} ${t("notes")}`}
-                rows={constant.FORM_TEXT_AREA_ROW}
-                maxLength={constant.FORM_TEXT_AREA_LIMIT}
               />
             </Form.Item>
             <Form.Item className="mb-0 text-right">

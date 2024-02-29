@@ -24,6 +24,8 @@ import {
   MenuFoldOutlined,
   SettingOutlined,
   AppstoreOutlined,
+  ScheduleOutlined,
+  ShoppingCartOutlined,
   UserOutlined,
   TableOutlined,
   PoweroffOutlined,
@@ -114,7 +116,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.SubMenu
               key="menu-PPIC"
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
-              icon={<TableOutlined />}
+              icon={<ScheduleOutlined />}
               title={t("ppic")}
             >
               {utils.renderWithPermission(
@@ -153,7 +155,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
           <Menu.SubMenu
             style={{ fontSize: conditionalMobileState("10px", "14px") }}
             key="menu-purchasing"
-            icon={<SettingOutlined />}
+            icon={<ShoppingCartOutlined />}
             title={t("Procurement")}
           >
             <Menu.Item key="/procurement/dashboard">
@@ -195,7 +197,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.SubMenu
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
               key="menu-transaction"
-              icon={<AppstoreOutlined />}
+              icon={<ScheduleOutlined />}
               title={t("Transaction")}
             >
               {utils.renderWithPermission(

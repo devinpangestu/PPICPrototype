@@ -156,6 +156,7 @@ export const Logout = async (req, res) => {
 };
 
 export const ChangePwd = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
   try {
     const { old_password, new_password, new_password_confirm } =
       req.body.rq_body;
@@ -174,7 +175,10 @@ export const ChangePwd = async (req, res) => {
       return errorResponse(req, res, "User not found");
     }
 
-    const eligibilityMessage = await checkPasswordChangeEligibility(user);
+    const eligibilityMessage = await checkPasswordChangeEligibility(
+      user,
+      dbTransaction
+    );
     if (eligibilityMessage) {
       return errorResponse(req, res, eligibilityMessage);
     }
@@ -207,11 +211,48 @@ export const ChangePwd = async (req, res) => {
       updated_at: new Date(),
       password_changed_at: new Date(),
     };
-    await db.USERS.update(payload, {
+
+    const getPasswordList = await db.USERS.findOne({
       where: { id: userId },
+      attributes: ["last_used_password"],
     });
+    if (!getPasswordList) {
+      payload.last_used_password = JSON.stringify([newPasswordToHash]);
+    } else {
+      const lastUsedPassword = JSON.parse(getPasswordList.last_used_password);
+      //check if new password is same as last 5 password
+      for (let i = 0; i < lastUsedPassword.length; i++) {
+        const isSame = await bcrypt.compare(new_password, lastUsedPassword[i]);
+        if (isSame) {
+          return errorResponse(
+            req,
+            res,
+            "Can't use the old password, please try other combination"
+          );
+        }
+      }
+      if (lastUsedPassword.length >= 5) {
+        lastUsedPassword.shift();
+        lastUsedPassword.push(newPasswordToHash);
+      } else {
+        lastUsedPassword.push(newPasswordToHash);
+      }
+      payload.last_used_password = JSON.stringify(lastUsedPassword);
+    }
+
+    await db.USERS.update(
+      payload,
+      {
+        where: { id: userId },
+      },
+      {
+        transaction: dbTransaction,
+      }
+    );
+    await dbTransaction.commit();
     return successResponse(req, res, "Success Changing Password");
   } catch (error) {
+    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -332,7 +373,7 @@ const handleAccountLock = async (user) => {
   return null;
 };
 
-const checkPasswordChangeEligibility = async (user) => {
+const checkPasswordChangeEligibility = async (user, transaction) => {
   if (user && user.password_changed_at) {
     const minChangePasswordDuration = 24 * 60 * 60 * 1000; // Base lock duration (24 hour)
     const maxChangePasswordDuration = 90 * 24 * 60 * 60 * 1000;
@@ -352,14 +393,7 @@ const checkPasswordChangeEligibility = async (user) => {
       } ${timeLeftMinutes % 60} minutes, and ${timeLeftSeconds % 60} seconds`;
     } else {
       // Unlock the account if the lock duration has passed
-      await db.USERS.update(
-        {
-          password_changed_at: new Date(),
-        },
-        {
-          where: { user_id: user.user_id },
-        }
-      );
+
       return null; // Password change is allowed
     }
   }

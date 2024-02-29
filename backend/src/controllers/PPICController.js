@@ -6,7 +6,7 @@ import {
   uniqueId,
 } from "../helpers/index.js";
 import { Op, Sequelize, literal, QueryTypes } from "sequelize";
-import { getUserID } from "../utils/auth.js";
+import { getUserID, getUserName } from "../utils/auth.js";
 import {
   parsingDateToString,
   parsingStringToDateEarly,
@@ -17,12 +17,21 @@ import {
   filterDeletedDoubleFindCount,
   filterDoubleFindCount,
 } from "../utils/filter.js";
-import { row } from "mathjs";
+import moment from "moment";
+import { constant } from "../constant/index.js";
 
 export const PPICScheduleSummary = async (req, res) => {
   try {
-    const { from_date, to_date, user_id, supplier_id, search_PO, status } =
-      req.query;
+    const {
+      from_date,
+      to_date,
+      user_id,
+      supplier_id,
+      io_filter,
+      category_filter,
+      search_PO,
+      status,
+    } = req.query;
     const userId = getUserID(req);
     if (!userId) {
       return errorResponse(
@@ -56,6 +65,14 @@ export const PPICScheduleSummary = async (req, res) => {
     if (user_id) {
       whereClauseDeleted[Op.and].push({ created_by_id: user_id });
       whereClause[Op.and].push({ created_by_id: user_id });
+    }
+    if (io_filter) {
+      whereClauseDeleted[Op.and].push({ io_filter });
+      whereClause[Op.and].push({ io_filter });
+    }
+    if (category_filter) {
+      whereClauseDeleted[Op.and].push({ category_filter });
+      whereClause[Op.and].push({ category_filter });
     }
 
     if (supplier_id) {
@@ -111,8 +128,16 @@ export const PPICScheduleSummary = async (req, res) => {
 };
 
 export const PPICScheduleList = async (req, res) => {
-  const { from_date, to_date, status, supplier_id, user_id, searchPO } =
-    req.query;
+  const {
+    from_date,
+    to_date,
+    status,
+    supplier_id,
+    io_filter,
+    category_filter,
+    user_id,
+    searchPO,
+  } = req.query;
   try {
     const customOrder = (column, values, direction) => {
       let orderByClause = "CASE ";
@@ -132,14 +157,13 @@ export const PPICScheduleList = async (req, res) => {
         "User belum terautentikasi, silahkan login kembali"
       );
     }
+
     const whereClause = {
       [Op.and]: [],
     };
     if (status) {
       if (status === "deleted") {
         whereClause[Op.and].push({ [Op.not]: [{ deleted_at: null }] });
-      } else if (status === "allSchedules") {
-        whereClause[Op.and].push({ deleted_at: null });
       } else {
         whereClause[Op.and].push({ flag_status: status });
       }
@@ -158,6 +182,12 @@ export const PPICScheduleList = async (req, res) => {
     if (supplier_id) {
       whereClause[Op.and].push({ supplier_id: supplier_id });
     }
+    if (io_filter) {
+      whereClause[Op.and].push({ io_filter });
+    }
+    if (category_filter) {
+      whereClause[Op.and].push({ category_filter });
+    }
     if (user_id) {
       whereClause[Op.and].push({ created_by_id: user_id });
     }
@@ -169,6 +199,11 @@ export const PPICScheduleList = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
+          attributes: ["id", "name"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
           attributes: ["id", "name"],
         },
         {
@@ -238,18 +273,24 @@ export const PPICScheduleCreate = async (req, res) => {
     const {
       submission_date,
       supplier_name,
+      line_num,
       po_number,
+      io_filter,
+      category_filter,
       po_qty,
       po_outs,
       sku_code,
       sku_name,
       qty_delivery,
       est_delivery,
+      notes_ppic,
       auto_fill,
       mass,
+      buyer_name,
     } = req.body.rq_body;
     const isMass = req.query.mass;
     const userId = getUserID(req);
+    const userName = getUserName(req);
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -258,10 +299,14 @@ export const PPICScheduleCreate = async (req, res) => {
       );
     }
     //check if id ship is exist
+    //TODO AUTOFILL DONE
+    //TODO MASS DONE
+    //TODO MANUAL
     if (isMass) {
       for (let key in mass) {
         let rowToInsert = mass[key];
         //check id for supplier
+
         const supplier = await db.SUPPLIERS.findOne({
           where: { name: rowToInsert.supplier_name },
         });
@@ -280,6 +325,8 @@ export const PPICScheduleCreate = async (req, res) => {
                 parsingStringToDateLate(rowToInsert.submission_date),
               ],
             },
+            io_filter: rowToInsert?.io_filter,
+            category_filter: rowToInsert?.category_filter,
             supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
             po_number: rowToInsert.po_number,
             po_qty: Number(rowToInsert.po_qty),
@@ -326,16 +373,13 @@ export const PPICScheduleCreate = async (req, res) => {
           if (!err) {
             return errorResponse(req, res, "Gagal mencari data PO Outstanding");
           }
-          if (!result[0].QUANTITY_OUTSTANDING) {
-            continue;
-          } else if (rowToInsert.po_outs > result[0].QUANTITY_OUTSTANDING) {
+          if (rowToInsert.po_outs > result[0].QUANTITY_OUTSTANDING) {
             return errorResponse(
               req,
               res,
               `Outstanding quantity tidak cocok dengan data outstanding quantity Oracle untuk PO ${rowToInsert.po_number} dan barang ${rowToInsert.sku_name}, mohon cek kembali`
             );
           }
-          console.log(result);
         }
 
         const [err, result] = await OpenQueryGetLineNum(
@@ -352,6 +396,7 @@ export const PPICScheduleCreate = async (req, res) => {
             `Data PO ${rowToInsert.po_number} dan barang ${rowToInsert.sku_name} tidak ditemukan`
           );
         }
+        //search buyer id
 
         if (rowToInsert.qty_delivery > rowToInsert.po_outs) {
           return errorResponse(
@@ -361,25 +406,54 @@ export const PPICScheduleCreate = async (req, res) => {
           );
         }
 
-        await db.OFFERS.create(
-          {
-            submission_date: rowToInsert.submission_date,
-            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
-            po_number: rowToInsert.po_number,
-            po_qty: Number(rowToInsert.po_qty),
-            po_outs: Number(rowToInsert.po_outs),
-            sku_code: rowToInsert.sku_code,
-            sku_name: rowToInsert.sku_name,
-            qty_delivery: Number(rowToInsert.qty_delivery),
-            est_delivery: rowToInsert.est_delivery,
-            created_by_id: userId,
-            updated_by_id: userId,
-            created_at: new Date(),
-            updated_at: new Date(),
-            line_num: result[0].line_number,
-          },
-          { dbTransaction }
-        );
+        const getBuyerId = await db.USERS.findOne({
+          attributes: ["id"],
+          raw: true,
+          where: { oracle_username: result[0].BUYER_NAME },
+        });
+        if (!getBuyerId) {
+          return errorResponse(
+            req,
+            res,
+            `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
+          );
+        }
+        const payloadToInsert = {
+          submission_date: rowToInsert.submission_date,
+          io_filter: rowToInsert.io_filter,
+          category_filter: rowToInsert.category_filter,
+          supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+          po_number: rowToInsert.po_number,
+          po_qty: Number(rowToInsert.po_qty),
+          po_outs: Number(rowToInsert.po_outs),
+          sku_code: rowToInsert.sku_code,
+          sku_name: rowToInsert.sku_name,
+          qty_delivery: Number(rowToInsert.qty_delivery),
+          est_delivery: rowToInsert.est_delivery,
+          history: JSON.stringify([
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Inserted Data by mass import by ${userName}`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
+          buyer_id: getBuyerId.id,
+          created_by_id: userId,
+          updated_by_id: userId,
+          created_at: new Date(),
+          updated_at: new Date(),
+          line_num: result[0].LINE_NUMBER,
+          notes: JSON.stringify({
+            init: {
+              notes: rowToInsert.notes_ppic,
+              updated_by: userName,
+              updated_at: new Date(),
+            },
+          }),
+        };
+        await db.OFFERS.create(payloadToInsert, { dbTransaction });
       }
       return successResponse(req, res, "Success Import Data Jadwal Pengiriman");
     } else {
@@ -388,6 +462,17 @@ export const PPICScheduleCreate = async (req, res) => {
         const supplier = await db.SUPPLIERS.findOne({
           where: { name: supplier_name },
         });
+        const getBuyerId = await db.USERS.findOne({
+          attributes: ["id"],
+          where: { oracle_username: buyer_name },
+        });
+        if (!getBuyerId) {
+          return errorResponse(
+            req,
+            res,
+            `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
+          );
+        }
         const checkIfDataExist = await db.OFFERS.findOne({
           where: {
             supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
@@ -399,6 +484,7 @@ export const PPICScheduleCreate = async (req, res) => {
                 parsingStringToDateLate(est_delivery),
               ],
             },
+            deleted_at: null,
           },
         });
 
@@ -419,6 +505,8 @@ export const PPICScheduleCreate = async (req, res) => {
         await db.OFFERS.create(
           {
             submission_date,
+            io_filter,
+            category_filter,
             supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
             po_number,
             po_qty,
@@ -427,6 +515,24 @@ export const PPICScheduleCreate = async (req, res) => {
             sku_name,
             qty_delivery,
             est_delivery,
+            line_num,
+            buyer_id: getBuyerId.id,
+            notes: JSON.stringify({
+              init: {
+                notes: notes_ppic,
+                created_by: userName,
+                created_at: new Date(),
+              },
+            }),
+            history: JSON.stringify([
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Inserted Data by PO Search by ${userName}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
             created_by_id: userId,
             updated_by_id: userId,
             created_at: new Date(),
@@ -446,6 +552,7 @@ export const PPICScheduleCreate = async (req, res) => {
             sku_name,
             qty_delivery,
             est_delivery,
+            deleted_at: null,
           },
         });
 
@@ -499,6 +606,22 @@ export const PPICScheduleCreate = async (req, res) => {
             sku_name,
             qty_delivery,
             est_delivery,
+            history: JSON.stringify([
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Inserted Data by Manual Input by ${userName}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            notes: JSON.stringify({
+              init: {
+                notes: notes_ppic,
+                updated_by: userName,
+                updated_at: new Date(),
+              },
+            }),
             created_by_id: userId,
             updated_by_id: userId,
             created_at: new Date(),
@@ -752,13 +875,13 @@ export const PPICScheduleRefreshPOOuts = async (req, res) => {
           sku_code,
           dbTransaction
         );
-        // console.log()
+
         if (!err) {
           return errorResponse(req, res, "Gagal refresh data PO Outs");
         }
 
         const qtyOuts = res[0].QUANTITY_OUTSTANDING;
-        // console.log()
+
         if (qtyOuts == null) {
           continue;
         } else {
@@ -823,6 +946,7 @@ export const PPICScheduleSendToPurchasing = async (req, res) => {
     const { rq_body } = req.body;
 
     const userId = getUserID(req);
+    const userName = getUserName(req);
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -836,9 +960,29 @@ export const PPICScheduleSendToPurchasing = async (req, res) => {
       let rowToUpdate = rq_body[key];
       //check id for supplier
       const id = rowToUpdate.id;
+      const getExistingHistory = await db.OFFERS.findOne({
+        where: { id },
+        attributes: ["history"],
+      });
+      const history = JSON.parse(getExistingHistory?.history);
+
       if (rowToUpdate.flag_status == "A") {
         await db.OFFERS.update(
-          { flag_status: "B", updated_by_id: userId },
+          {
+            flag_status: "B",
+            updated_by_id: userId,
+            updated_at: new Date(),
+            history: JSON.stringify([
+              ...(history || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Data Sent to Purchasing by ${userName}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+          },
           {
             where: { id },
           },
@@ -846,7 +990,21 @@ export const PPICScheduleSendToPurchasing = async (req, res) => {
         );
       } else if (rowToUpdate.flag_status == "C") {
         await db.OFFERS.update(
-          { flag_status: "D", updated_by_id: userId },
+          {
+            flag_status: "D",
+            updated_by_id: userId,
+            updated_at: new Date(),
+            history: JSON.stringify([
+              ...(history || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Data Sent After Retur to Purchasing by ${userName}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+          },
           {
             where: { id },
           },
@@ -870,6 +1028,7 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
 
     const userId = getUserID(req);
+    const userName = getUserName(req);
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -879,6 +1038,13 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherSplit = await db.OFFERS.findAll({
       where: {
@@ -893,6 +1059,16 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
         {
           qty_delivery: checkAnotherSplit[key].dataValues.submitted_qty,
           est_delivery: checkAnotherSplit[key].dataValues.est_submitted_date,
+          history: JSON.stringify([
+            ...(checkAnotherSplit[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Split Schedule Request Accepted by ${userName} and flagged as success`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           flag_status: "X",
           split_from_id: null,
           updated_by_id: userId,
@@ -933,6 +1109,13 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherSplit = await db.OFFERS.findAll({
       where: {
@@ -945,6 +1128,18 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
     await db.OFFERS.update(
       {
         flag_status: "E",
+        history: JSON.stringify([
+          ...(checkTheCurrentID.history || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Split Schedule Request Rejected by ${userName} and sent back to Supplier ${
+              checkTheCurrentID?.supplier?.name
+            }`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
         is_split: false,
         updated_by_id: userId,
         updated_at: new Date(),
@@ -985,6 +1180,13 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherEditedOffer = await db.OFFERS.findAll({
       where: {
@@ -1001,6 +1203,16 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
           qty_delivery: checkAnotherEditedOffer[key].dataValues.submitted_qty,
           est_delivery:
             checkAnotherEditedOffer[key].dataValues.est_submitted_date,
+          history: JSON.stringify([
+            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Edit Schedule Request Accepted by ${userName} and flagged as success`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           edit_from_id: null,
           flag_status: "X",
           updated_by_id: userId,
@@ -1041,6 +1253,13 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
     }
     const checkTheCurrentID = await db.OFFERS.findOne({
       where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
     });
     const checkAnotherEditedOffer = await db.OFFERS.findAll({
       where: {
@@ -1055,6 +1274,19 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
       await db.OFFERS.update(
         {
           flag_status: "E",
+          history: JSON.stringify([
+            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Edit Schedule Request Rejected by ${userName} and sent back to Supplier ${
+                checkTheCurrentID?.supplier?.name
+              }`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
+
           is_edit: false,
           updated_by_id: userId,
           updated_at: new Date(),
@@ -1155,24 +1387,27 @@ const OpenQueryPODetails = async (poNumber, lineNumber, transaction) => {
 const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
   const skuSplit = skuCode.split(".");
   const getPODetails = (po, skucode) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
-    SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pla.line_num line_number, msi.description nama_sku
-    from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
-    APPS.ap_suppliers aps, APPS.mtl_system_items msi
-    where 1=1
-    and pha.segment1 = ''${po}''
-    and pha.po_header_id = pla.po_header_id
-    and pla.po_line_id = pda.po_line_id
-    and msi.segment1 = ''${skucode[0]}''
-    and msi.segment2 = ''${skucode[1]}''
-    and msi.segment3 = ''${skucode[2]}''
-    and pha.vendor_id = aps.vendor_id
-    and pla.item_id = msi.inventory_item_id
-    and msi.organization_id = 101
-    group by aps.vendor_Name, pha.segment1,
-    pla.line_num, pla.quantity,
-    (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3), 
-    msi.description')`;
+    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1, PLA.LINE_NUM, PLA.QUANTITY, 
+    SUM(PDA.QUANTITY_ORDERED-PDA.QUANTITY_DELIVERED-PDA.QUANTITY_CANCELLED) QTY_OUTS,
+    PLA.LINE_NUM LINE_NUMBER, MSI.DESCRIPTION NAMA_SKU,FU.USER_NAME BUYER_NAME
+    FROM APPS.PO_HEADERS_ALL PHA, APPS.PO_LINES_ALL PLA, APPS.PO_DISTRIBUTIONS_ALL PDA,
+    APPS.AP_SUPPLIERS APS,APPS.MTL_SYSTEM_ITEMS MSI,APPS.PER_ALL_PEOPLE_F PAP, APPS.FND_USER FU
+    WHERE 1=1
+    AND PHA.SEGMENT1 = ''${po}''
+    AND PHA.PO_HEADER_ID = PLA.PO_HEADER_ID
+    AND PLA.PO_LINE_ID = PDA.PO_LINE_ID
+    AND MSI.SEGMENT1 = ''PKT''
+    AND MSI.SEGMENT2 = ''${skucode[1]}''
+    AND MSI.SEGMENT3 = ''${skucode[2]}''
+    AND PHA.VENDOR_ID = APS.VENDOR_ID
+    AND PLA.ITEM_ID = MSI.INVENTORY_ITEM_ID
+    AND MSI.ORGANIZATION_ID = 101
+    AND PHA.AGENT_ID = PAP.PERSON_ID
+    AND FU.EMPLOYEE_ID = PAP.PERSON_ID 
+    GROUP BY APS.VENDOR_NAME, PHA.SEGMENT1,
+    PLA.LINE_NUM, PLA.QUANTITY,
+    (MSI.SEGMENT1 || ''.'' || MSI.SEGMENT2 || ''.'' ||MSI.SEGMENT3), 
+    MSI.DESCRIPTION,FU.USER_NAME')`;
 
     return queryWithSchema;
   };

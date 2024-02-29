@@ -20,6 +20,7 @@ import {
   Collapse,
   Table,
   message,
+  Progress,
 } from "antd";
 import { api } from "api";
 import configs from "configs";
@@ -33,7 +34,7 @@ import moment from "moment";
 import ModalPriceData from "components/ModalPriceData";
 import ModalExport from "components/ModalExport";
 import { SectionHeading } from "components/Section";
-import ModalEdit from "../ppic/modal/ModalEdit";
+import ModalEdit from "./modal/ModalEdit";
 const { Panel } = Collapse;
 
 const Transaction = (props) => {
@@ -70,6 +71,28 @@ const Transaction = (props) => {
   const [modalEditData, setModalEditData] = useState(null);
 
   const [modalExportShow, setModalExportShow] = useState(false);
+  const [schedulePercentage, setSchedulePercentage] = useState([]);
+
+  const [expandable, setExpandable] = useState({
+    expandedRowRender: (record) => {
+      const historyDetail = JSON.parse(record.history);
+      return historyDetail.map((history, index) => {
+        return (
+          <p key={index} style={{ margin: 0, fontSize: "1rem" }}>
+            {`${history?.detail}`}
+          </p>
+        );
+      });
+    },
+
+    rowExpandable: (record) => {
+      return record.history;
+    },
+  });
+  const tableProps = {
+    expandable,
+  };
+
   const EXPORT_TYPE = "transaction_history";
 
   useEffect(() => {
@@ -101,6 +124,24 @@ const Transaction = (props) => {
     }
   }, [filterStatus, pageNumber, filterValue]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const statusPercentageValue = {
+    A: 0,
+    B: 100 / 5,
+    C: 0,
+    D: 100 / 5,
+    E: (100 / 5) * 2,
+    F: (100 / 5) * 3,
+    G: (100 / 5) * 4,
+    X: 100,
+  };
+
+  const countPercentage = (scheduleRow, complete, total) => {
+    if (scheduleRow) {
+      const percentage = (complete / total) * 100;
+      setSchedulePercentage(percentage);
+    }
+  };
+
   const applyFilter = (values) => {
     if (!values) {
       return;
@@ -129,7 +170,19 @@ const Transaction = (props) => {
 
     setFilterValue(newFilterValue);
   };
-
+  const renderStatusTag = (color, text) => (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+        {text}
+      </Tag>
+    </div>
+  );
   const resetFilter = () => {
     form.resetFields();
     setFilterValue({});
@@ -241,12 +294,19 @@ const Transaction = (props) => {
             sku_count: POList.sku_count,
             total_schedule: POList.total_schedule,
             complete_schedule: POList.complete_schedule,
+            schedules: POList.schedules,
           },
         };
       });
       return (
         <Collapse accordion={true} onChange={handleCollapseChange}>
           {items.map((item) => {
+            const valuesMap = item.label.schedules.map(
+              (schedule) => statusPercentageValue[schedule.flag_status],
+            );
+            const averagePercentage =
+              valuesMap.reduce((sum, value) => sum + value, 0) / valuesMap.length;
+
             return (
               <Panel
                 header={
@@ -258,25 +318,7 @@ const Transaction = (props) => {
                     ${item.label.complete_schedule} out of ${item.label.total_schedule} Schedule Completed`}
                     style={{ fontSize: "20px", whiteSpace: "pre-line" }}
                     additionalAction={(() => {
-                      if (item.label.complete_schedule === item.label.total_schedule) {
-                        return (
-                          <Tag className="ma-0" style={{ fontSize: "20px" }} color="success">
-                            Completed
-                          </Tag>
-                        );
-                      } else if (item.label.complete_schedule === 0) {
-                        return (
-                          <Tag className="ma-0" style={{ fontSize: "20px" }} color="warning">
-                            In Progress
-                          </Tag>
-                        );
-                      } else if (item.label.complete_schedule < item.label.total_schedule) {
-                        return (
-                          <Tag className="ma-0" style={{ fontSize: "20px" }} color="warning">
-                            Partially Complete
-                          </Tag>
-                        );
-                      }
+                      return <Progress type="circle" percent={averagePercentage} />;
                     })()}
                     actionStyle={{ fontSize: "20px", textAlign: "right" }}
                   />
@@ -301,21 +343,37 @@ const Transaction = (props) => {
         getAllSKUScheduleDetail(poNumber, SKUCodeCurrentClicked);
       }
     };
+
     if (selectedPOData && selectedPOData.length > 0) {
       const items = selectedPOData.map((POData, index) => {
         return {
           key: index,
           label: `(${POData.sku_code} - ${POData.sku_name})  ${POData.offer_count} Schedule`,
           children: `ini data panel ${index}`,
+          data: POData.schedules,
         };
       });
       return (
         <Collapse accordion={true} onChange={handleCollapseChange}>
           {items.map((item) => {
+            const valuesMap = item.data.map(
+              (schedule) => statusPercentageValue[schedule.flag_status],
+            );
+            const averagePercentage =
+              valuesMap.reduce((sum, value) => sum + value, 0) / valuesMap.length;
+
             return (
               <Panel
                 header={
-                  <SectionHeading title={`SKU - ${item.label}`} style={{ fontSize: "20px" }} />
+                  <SectionHeading
+                    title={`SKU - ${item.label}`}
+                    style={{ fontSize: "20px" }}
+                    additionalAction={(() => {})()}
+                    actionStyle={{
+                      display: "flex",
+                      justifyContent: "right",
+                    }}
+                  />
                 }
                 key={item.key}
               >
@@ -391,7 +449,38 @@ const Transaction = (props) => {
         render: (_, row) => {
           let btnEdit;
           let tagComplete;
-          if (row.flag_status === "X") {
+
+          const valuesMap = statusPercentageValue[row.flag_status];
+          if (row.deleted_at !== null) return renderStatusTag("error", "Deleted");
+          if (
+            row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+            row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
+          ) {
+            return renderStatusTag("error", "at PPIC");
+          }
+          if (
+            row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+            row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+          ) {
+            return renderStatusTag("error", "at Procurement");
+          }
+          if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+            return renderStatusTag("error", `at Supplier ${row.supplier.name}`);
+          }
+          if (
+            row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+            row.split_from_id !== null
+          ) {
+            return renderStatusTag("warning", "Split Request (Supplier to Procurement)");
+          }
+          if (
+            row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+            row.edit_from_id !== null
+          ) {
+            return renderStatusTag("warning", "Edit Request (Supplier to Procurement)");
+          }
+
+          if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
             btnEdit = (
               <Button
                 className="ma-0"
@@ -405,13 +494,7 @@ const Transaction = (props) => {
                 {t("Edit")}
               </Button>
             );
-            tagComplete = (
-              <>
-                <Tag className="ma-0" color="success">
-                  Completed
-                </Tag>
-              </>
-            );
+            tagComplete = renderStatusTag("success", "Complete");
             return (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 {btnEdit}
@@ -419,12 +502,14 @@ const Transaction = (props) => {
               </div>
             );
           }
+          return;
         },
       },
     ];
 
     return (
       <Table
+        {...tableProps}
         dataSource={dataSource}
         columns={columns}
         pagination={false}

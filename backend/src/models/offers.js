@@ -28,6 +28,7 @@ export default (sequelize, DataTypes) => {
       });
       this.belongsTo(models.USERS, {
         foreignKey: "buyer_id",
+        as: "buyer",
       });
       this.hasOne(models.SUPPLIERS, {
         foreignKey: {
@@ -50,6 +51,7 @@ export default (sequelize, DataTypes) => {
         defaultValue: DataTypes.NOW,
         type: DataTypes.DATE,
       },
+
       supplier_id: {
         allowNull: false,
         type: DataTypes.NUMERIC,
@@ -59,6 +61,14 @@ export default (sequelize, DataTypes) => {
         },
       },
       po_number: {
+        defaultValue: null,
+        type: DataTypes.STRING,
+      },
+      category_filter: {
+        defaultValue: null,
+        type: DataTypes.STRING,
+      },
+      io_filter: {
         defaultValue: null,
         type: DataTypes.STRING,
       },
@@ -72,17 +82,11 @@ export default (sequelize, DataTypes) => {
       po_qty: {
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       po_outs: {
         // allowNull: false,
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       sku_code: {
         allowNull: false,
@@ -98,9 +102,6 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       est_delivery: {
         defaultValue: DataTypes.NOW,
@@ -115,21 +116,16 @@ export default (sequelize, DataTypes) => {
       submitted_qty: {
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       est_submitted_date: { defaultValue: null, type: DataTypes.DATE },
       gr_qty: {
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       flag_status: { defaultValue: "A", type: DataTypes.STRING },
       buyer_id: { defaultValue: null, type: DataTypes.NUMERIC },
       notes: { defaultValue: null, type: DataTypes.TEXT },
+      history: { defaultValue: null, type: DataTypes.TEXT },
       edit_from_id: { defaultValue: null, type: DataTypes.NUMERIC },
       is_edit: { defaultValue: false, type: DataTypes.BOOLEAN },
       split_from_id: { defaultValue: null, type: DataTypes.NUMERIC },

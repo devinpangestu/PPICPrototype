@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import env from "../validateEnv.js";
 dotenv.config();
 
-export const sendEmailVerification = async (email, subject, text) => {
+export const sendEmailVerification = async (email, subject, password) => {
   try {
     const transporter = nodemailer.createTransport({
       host: env.EMAIL_HOST,
@@ -19,12 +19,11 @@ export const sendEmailVerification = async (email, subject, text) => {
       //   },
     });
     const baseUrl = `${process.env.BASE_URL}:${process.env.API_PORT}`;
-    console.log(`${baseUrl}/images/download.jpg`);
     const mailOptions = {
       from: `PT. Bina Karya Prima - PPIC <${env.EMAIL_USERNAME}>`,
       to: email,
       subject: subject,
-      text: text,
+      text: "Account Information",
       html: `<!DOCTYPE html>
 
       <html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:v="urn:schemas-microsoft-com:vml">
@@ -226,7 +225,7 @@ export const sendEmailVerification = async (email, subject, text) => {
       <tr>
       <td class="pad" style="padding-bottom:10px;padding-left:40px;padding-right:40px;padding-top:10px;">
       <div style="color:#555555;font-family:Montserrat, Trebuchet MS, Lucida Grande, Lucida Sans Unicode, Lucida Sans, Tahoma, sans-serif;font-size:30px;line-height:120%;text-align:center;mso-line-height-alt:36px;">
-      <p style="margin: 0; word-break: break-word;"><span style="color:#2b303a;"><strong>Verify Your Email Account</strong></span></p>
+      <p style="margin: 0; word-break: break-word;"><span style="color:#2b303a;"><strong>Log In Information</strong></span></p>
       </div>
       </td>
       </tr>
@@ -237,11 +236,18 @@ export const sendEmailVerification = async (email, subject, text) => {
       <div style="color:#555555;font-family:Montserrat, Trebuchet MS, Lucida Grande, Lucida Sans Unicode, Lucida Sans, Tahoma, sans-serif;font-size:15px;line-height:150%;text-align:left;mso-line-height-alt:22.5px;">
       <p style="margin: 0;">Hello,</p>
       <p style="margin: 0;">Somebody just used this email address to register at PT. Bina Karya Prima Schedule System.</p>
-      <p style="margin: 0;">If this was you, verify your email by clicking on the link below:</p>
-      <p style="margin: 0;"><a href="${text}" rel="noopener" style="text-decoration: underline; color: #0472b2;" target="_blank">${text}</a></p>
+      <p style="margin: 0;">If this was you, please logging in using this information</p>
+      <p style="margin: 0;"> </p>
+      <strong><p style="margin: 0;">
+      User: ${email}
+      </p></strong>
+      <strong><p style="margin: 0;">
+      Password: ${password}
+      </p></strong>
+      <p style="margin: 0;"> </p>
       <p style="margin: 0;">If this was not for you, please mind to ignore this email so your internet properties are not at risk.</p>
       <p style="margin: 0;"> </p>
-      <p style="margin: 0;">Token: 653e5647a38b8f8b7d33c88c4fc5143793490b0bf1878b4ff3035edaf8893dd7</p>
+      <p style="margin: 0;">Don't share this information to others.</p>
       <p style="margin: 0;"> </p>
       <p style="margin: 0;">Thanks, PT. Bina Karya Prima</p>
       </div>
@@ -350,8 +356,8 @@ export const sendEmailVerification = async (email, subject, text) => {
       <!--[if !vml]><!-->
       <table cellpadding="0" cellspacing="0" class="icons-inner" role="presentation" style="mso-table-lspace: 0pt; mso-table-rspace: 0pt; display: inline-block; margin-right: -4px; padding-left: 0px; padding-right: 0px;"><!--<![endif]-->
       <tr>
-      <td style="vertical-align: middle; text-align: center; padding-top: 5px; padding-bottom: 5px; padding-left: 5px; padding-right: 6px;"><a href="http://designedwithbeefree.com/" style="text-decoration: none;" target="_blank"><img align="center" alt="Beefree Logo" class="icon" height="32" src="cid:beefree_img" style="display: block; height: auto; margin: 0 auto; border: 0;" width="34"/></a></td>
-      <td style="font-family: 'Inter', sans-serif; font-size: 15px; font-weight: undefined; color: #1e0e4b; vertical-align: middle; letter-spacing: undefined; text-align: center;"><a href="http://designedwithbeefree.com/" style="color: #1e0e4b; text-decoration: none;" target="_blank">Designed with Beefree</a></td>
+      <td style="vertical-align: middle; text-align: center; padding-top: 5px; padding-bottom: 5px; padding-left: 5px; padding-right: 6px;"></td>
+      <td style="font-family: 'Inter', sans-serif; font-size: 15px; font-weight: undefined; color: #1e0e4b; vertical-align: middle; letter-spacing: undefined; text-align: center;"></td>
       </tr>
       </table>
       </td>
@@ -400,11 +406,6 @@ export const sendEmailVerification = async (email, subject, text) => {
           path: "public/images/linkedin2x.png",
           cid: "linkedin_img", //same cid value as in the html img src
         },
-        {
-          filename: "Beefree-logo.png",
-          path: "public/images/Beefree-logo.png",
-          cid: "beefree_img", //same cid value as in the html img src
-        },
       ],
     };
 
@@ -413,7 +414,7 @@ export const sendEmailVerification = async (email, subject, text) => {
         return console.log(error);
       }
 
-      console.log("Message sent: " + info.response);
+      console.log(`Message sent to ${email}: ` + info.response);
     });
   } catch (error) {
     console.log("error sending email", error);

@@ -331,7 +331,7 @@ export const getPurchasing = (setPageLoading, setPurchasing) => {
       const rsBody = response.data.rs_body;
       let users = [{ value: null, label: "All" }];
       rsBody.users.forEach((el) => {
-        users.push({ value: el.id, label: el.name });
+        users.push({ value: el.id, label: el.name + " - " + el.oracle_username });
       });
       console.log(users);
       setPurchasing(users);

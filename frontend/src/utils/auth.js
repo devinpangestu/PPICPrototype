@@ -60,6 +60,13 @@ export const authorizationCheck = (currUserLogin) => {
     });
   }
 };
+export const passwordChangedCheck = (currUserLogin) => {
+  //check if the password never changed before because of new user
+  if (!currUserLogin.password_changed) {
+    window.location.replace("/change-password");
+    return;
+  }
+};
 
 export const getCSRFToken = () => {
   return window.csrfToken;
