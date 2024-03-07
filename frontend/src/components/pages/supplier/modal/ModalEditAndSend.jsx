@@ -31,38 +31,49 @@ function ModalEditAndSend(props) {
   const [processing, setProcessing] = useState(false);
   const { Text, Link } = Typography;
   const [splits, setSplits] = useState([]);
+  const [oriSchedule, setOriSchedule] = useState([]);
+  const [maxEditQty, setMaxEditQty] = useState(data?.qty_delivery);
+  const [maxQtyExistingOffer, setMaxQtyExistingOffer] = useState(data?.qty_delivery);
+  const [remainingQtyFulfilled, setRemainingQtyFulfilled] = useState(
+    splits.reduce((prev, curr) => prev + curr.qty_delivery, 0),
+  );
 
   useEffect(() => {
     if (!visible) {
       return;
     }
-    const schedules = data.map((item) => ({
-      id: item.id,
-      submission_date: moment(item.submission_date),
-      supplier_id: item.supplier_id,
-      po_number: item.po_number,
-      po_outs: item.po_outs,
-      sku_code: item.sku_code,
-      sku_name: item.sku_name,
-      split_from_id: item.split_from_id,
-      edit_from_id: item.edit_from_id,
-      flag_status: item.flag_status,
-      est_delivery: moment(item.est_delivery),
-      qty_delivery: item.qty_delivery,
-    }));
+    const schedules = data
+      .map((item) => ({
+        ...item,
+        submission_date: moment(item.submission_date),
+        est_delivery: moment(item.est_delivery),
+      }))
+      .filter((item) => {
+        return (
+          item.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+          item.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+          item.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+          item.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+        );
+      });
     form.setFieldsValue({ schedules });
+    setSplits(schedules);
+    setOriSchedule(schedules);
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleOnSubmit = (values) => {
     setProcessing(true);
-    for (let key in data) {
-      values.schedules[key].id = data[key].id;
-      values.schedules[key].supplier_id = parseInt(data[key].supplier_id);
-      values.schedules[key].po_qty = data[key].po_qty;
-      values.schedules[key].max_qty = data[key].po_qty;
+    console.log(values);
+    for (let key in oriSchedule) {
+      values.schedules[key].id = oriSchedule[key].id;
+      values.schedules[key].supplier_id = parseInt(oriSchedule[key].supplier_id);
+      values.schedules[key].po_qty = oriSchedule[key].po_qty;
+      values.schedules[key].max_qty = oriSchedule[key].po_qty;
+      values.schedules[key].created_by_id = oriSchedule[key].created_by_id;
+      values.schedules[key].buyer_id = oriSchedule[key].buyer_id;
     }
     api.suppliers
-      .editComplex(data, values.schedules)
+      .editComplex(oriSchedule, values.schedules)
       .then(function (response) {
         form.resetFields();
         onSuccess();
@@ -79,12 +90,32 @@ function ModalEditAndSend(props) {
   return (
     data && (
       <Modal
-        title={`EDIT SCHEDULE - ${data[0].supplier.name} - ${data[0].po_number} `}
+        title={`EDIT SCHEDULE - ${data[0].supplier.name} - ${data[0].po_number} 
+        MAX EDIT QTY: ${splits.reduce(
+          (prev, curr) => prev + curr.qty_delivery,
+          0,
+        )} REMAINING QTY FULFILLED: ${splits.reduce(
+          (prev, curr) => prev + curr.qty_delivery,
+          0,
+        )}/${data
+          .map((item) => ({
+            flag_status: item.flag_status,
+            qty_delivery: item.qty_delivery,
+          }))
+          .filter((item) => {
+            return (
+              item.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+              item.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+              item.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+              item.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+            );
+          })
+          .reduce((prev, curr) => prev + curr.qty_delivery, 0)}`}
         open={visible}
         onCancel={onCancel}
         footer={null}
         centered
-        style={{ minWidth: "50%" }}
+        style={{ minWidth: "50%", whiteSpace: "pre-line" }}
       >
         <Form form={form} onFinish={handleOnSubmit}>
           <Card className="price-input">
@@ -115,6 +146,14 @@ function ModalEditAndSend(props) {
                         removeBtnText = t("remove");
                         dividerClsName = "my-3";
                       }
+                      if (
+                        data[key].flag_status === constant.FLAG_STATUS_SUPPLIER &&
+                        data[key].flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+                        data[key].flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+                        data[key].flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+                      ) {
+                        return;
+                      }
 
                       return (
                         <>
@@ -142,7 +181,13 @@ function ModalEditAndSend(props) {
                                   }}
                                   {...utils.FORM_DATEPICKER_PROPS}
                                   style={{ width: "100%" }}
-                                  disabled={data[key].flag_status !== constant.FLAG_STATUS_SUPPLIER}
+                                  disabled={
+                                    data[key].flag_status ===
+                                      constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                                    data[key].flag_status ===
+                                      constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                                    data[key].flag_status === constant.FLAG_STATUS_PPIC_REQUEST
+                                  }
                                 />
                               </Form.Item>
                             </Col>
@@ -168,11 +213,19 @@ function ModalEditAndSend(props) {
                                   {...configs.FORM_MONEY_DEFAULT_PROPS}
                                   style={{ width: "100%" }}
                                   placeholder={`${t("input")} ${t("qtyDelivery")}`}
+                                  onChange={(value) => {
+                                    const { schedules } = form.getFieldsValue();
+                                    form.setFieldsValue({ schedules });
+                                    setSplits(schedules);
+                                    setRemainingQtyFulfilled(data?.qty_delivery - value);
+                                  }}
                                   disabled={
                                     fields.length === 1 ||
                                     data[key].flag_status ===
                                       constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                                    data[key].flag_status !== constant.FLAG_STATUS_SUPPLIER
+                                    data[key].flag_status ===
+                                      constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                                    data[key].flag_status === constant.FLAG_STATUS_PPIC_REQUEST
                                   }
                                 />
                               </Form.Item>
@@ -182,7 +235,7 @@ function ModalEditAndSend(props) {
                             <Col flex="auto" span={24}>
                               <Form.Item
                                 {...restField}
-                                name={[name, "notes"]}
+                                name={[name, "notesSup"]}
                                 className={formItemCls}
                                 label={t("notes")}
                                 rules={[

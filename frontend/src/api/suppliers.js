@@ -57,7 +57,13 @@ const suppliers = {
     return axios({
       method: "put",
       url: `/suppliers/complex-edit`,
-      data: { schedules: newData, ori_schedules: oriData },
+      data: { ori_schedules: oriData, schedules: newData },
+    });
+  },
+  closePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/suppliers/close-po/${id}`,
     });
   },
   confirm: (id, isMass) => {

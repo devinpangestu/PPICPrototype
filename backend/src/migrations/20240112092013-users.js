@@ -22,6 +22,10 @@ module.exports = {
         allowNull: false,
         type: Sequelize.TEXT,
       },
+      last_used_password: {
+        allowNull: false,
+        type: Sequelize.TEXT,
+      },
       email: {
         defaultValue: null,
         type: Sequelize.STRING,
@@ -38,6 +42,10 @@ module.exports = {
       supplier_id: {
         defaultValue: null,
         type: Sequelize.NUMERIC,
+        references: {
+          model: "SUPPLIERS",
+          key: "ref_id",
+        },
       },
       failed_login_attempts: {
         defaultValue: 0,
@@ -82,7 +90,6 @@ module.exports = {
         defaultValue: null,
         type: Sequelize.NUMERIC,
       },
-
       // Other fields...
     });
   },

@@ -14,38 +14,37 @@ const App = () => {
   console.log("userInfo");
   console.log(userInfo);
 
-  console.log(document.body.style);
-  // useEffect(() => {
-  //   window.addEventListener("storage", (e) => {
-  //     if (e.key === "access_token") {
-  //       window.location.reload();
-  //       return;
-  //     }
-  //   });
+  useEffect(() => {
+    window.addEventListener("storage", (e) => {
+      if (e.key === "access_token") {
+        window.location.reload();
+        return;
+      }
+    });
 
-  //   if (window.OneSignal && window.location.pathname !== "/login") {
-  //     window.OneSignal = window.OneSignal || [];
-  //     window.OneSignal.push(function () {
-  //       window.OneSignal.init({
-  //         appId: "b1ee5999-2dad-4e30-954c-f2b060605368",
-  //       });
-  //     });
+    //   if (window.OneSignal && window.location.pathname !== "/login") {
+    //     window.OneSignal = window.OneSignal || [];
+    //     window.OneSignal.push(function () {
+    //       window.OneSignal.init({
+    //         appId: "b1ee5999-2dad-4e30-954c-f2b060605368",
+    //       });
+    //     });
 
-  //     window.OneSignal.on("subscriptionChange", function (isSubscribed) {
-  //       console.log("is subscribed", isSubscribed);
-  //       window.OneSignal.push(function () {
-  //         window.OneSignal.getUserId(function (playerId) {
-  //           if (isSubscribed === true && playerId) {
-  //             console.log("player id", playerId);
-  //             api.users.registerOneSignalPlayerID(playerId).catch(function (error) {
-  //               console.log("error registering onesignal, err: ", utils.getErrMsg(error));
-  //             });
-  //           }
-  //         });
-  //       });
-  //     });
-  //   }
-  // }, []);
+    //     window.OneSignal.on("subscriptionChange", function (isSubscribed) {
+    //       console.log("is subscribed", isSubscribed);
+    //       window.OneSignal.push(function () {
+    //         window.OneSignal.getUserId(function (playerId) {
+    //           if (isSubscribed === true && playerId) {
+    //             console.log("player id", playerId);
+    //             api.users.registerOneSignalPlayerID(playerId).catch(function (error) {
+    //               console.log("error registering onesignal, err: ", utils.getErrMsg(error));
+    //             });
+    //           }
+    //         });
+    //       });
+    //     });
+    //   }
+  }, []);
 
   return (
     <CacheBuster>

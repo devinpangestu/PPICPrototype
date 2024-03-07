@@ -33,6 +33,11 @@ router.put(
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleSplitSupplier
 );
+router.put(
+  "/close-po/:id",
+  verifyTokenAndRole("supplier@edit"),
+  SupplierController.SupplierScheduleClosePOSupplier
+);
 
 router.get(
   "/:supplier_id",

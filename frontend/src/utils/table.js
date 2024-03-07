@@ -54,3 +54,7 @@ export const getPlainCol = (title, field, otherProps) => {
     ...otherProps,
   };
 };
+
+export const renderPlainColFindLabel = (array, colToRender) => (_, row) => {
+  return array.find((x) => x.value === row[colToRender])?.label;
+};

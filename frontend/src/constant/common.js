@@ -5,6 +5,18 @@ export const REJECT = "reject";
 export const DESKTOP_MIN_WIDTH = 992;
 export const MOBILE_MAX_WIDTH = 515; //samsung s21 ultra 5g
 
+export const WAREHOUSE_LIST = [
+  { label: "Marunda", value: "marunda" },
+  { label: "Bekasi", value: "bekasi" },
+  { label: "Gresik", value: "gresik" },
+];
+export const PPIC_CATEGORY_LIST = [
+  { label: "Oil", value: "oil" },
+  { label: "Margarine", value: "margarine" },
+  { label: "Barsoap", value: "barsoap" },
+  { label: "Cosmetic", value: "cosmetic" },
+];
+
 export const WAREHOUSE_MAP = {
   marunda: "Marunda",
   bekasi: "Bekasi",

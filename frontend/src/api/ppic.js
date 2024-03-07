@@ -56,6 +56,13 @@ const ppic = {
       url: `/ppic/${id}`,
     });
   },
+  getPODetail: (params) => {
+    return axios({
+      method: "get",
+      url: `/ppic/po-details`,
+      params,
+    });
+  },
   edit: (data) => {
     return axios({
       method: "put",
@@ -70,6 +77,13 @@ const ppic = {
       headers: {
         "X-CSRF-Token": csrfToken,
       },
+    });
+  },
+  refreshPOOuts: (params) => {
+    return axios({
+      method: "put",
+      url: `/ppic/refresh-outs`,
+      params,
     });
   },
   sendToPurchasing: (data, isMass) => {
@@ -109,6 +123,20 @@ const ppic = {
     return axios({
       method: "put",
       url: `/ppic/reject-edit`,
+      data: { id },
+    });
+  },
+  acceptClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/ppic/accept-close-po`,
+      data: { id },
+    });
+  },
+  rejectClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/ppic/reject-close-po`,
       data: { id },
     });
   },

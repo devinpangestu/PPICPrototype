@@ -120,8 +120,17 @@ export const Login = async (req, res) => {
       issued_at: new Date(),
       expired_at: expirationTime,
     };
+    const tokenObjSession = {
+      id: uniqueId(),
+      type: constant.TOKEN_TYPE_SESSION,
+      token,
+      user_id: Number(user.id),
+      issued_at: new Date(),
+      expired_at: expirationTime,
+    };
     try {
       await db.TOKEN.create(tokenObj);
+      await db.TOKEN.create(tokenObjSession);
       console.log("Token created successfully.");
     } catch (error) {
       console.error("Error creating token:", error);
@@ -146,16 +155,39 @@ export const LoginRfToken = async (req, res) => {};
 
 //LOGOUT
 export const Logout = async (req, res) => {
-  req.session.destroy((error) => {
-    if (error) {
-      next(error);
-    } else {
-      res.sendStatus(200);
-    }
-  });
+  const { access_token, user_define } = req.body.rq_body;
+
+  if (user_define) {
+    await db.TOKEN.destroy({
+      where: {
+        token: access_token,
+        [Op.or]: [
+          { type: constant.TOKEN_TYPE_ACCESS },
+          { type: constant.TOKEN_TYPE_SESSION },
+        ],
+      },
+    });
+
+    req.session.destroy((error) => {
+      if (error) {
+        next(error);
+      } else {
+        res.sendStatus(200);
+      }
+    });
+  } else {
+    req.session.destroy((error) => {
+      if (error) {
+        next(error);
+      } else {
+        res.sendStatus(200);
+      }
+    });
+  }
 };
 
 export const ChangePwd = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
   try {
     const { old_password, new_password, new_password_confirm } =
       req.body.rq_body;
@@ -174,7 +206,10 @@ export const ChangePwd = async (req, res) => {
       return errorResponse(req, res, "User not found");
     }
 
-    const eligibilityMessage = await checkPasswordChangeEligibility(user);
+    const eligibilityMessage = await checkPasswordChangeEligibility(
+      user,
+      dbTransaction
+    );
     if (eligibilityMessage) {
       return errorResponse(req, res, eligibilityMessage);
     }
@@ -207,15 +242,99 @@ export const ChangePwd = async (req, res) => {
       updated_at: new Date(),
       password_changed_at: new Date(),
     };
-    await db.USERS.update(payload, {
+
+    const getPasswordList = await db.USERS.findOne({
       where: { id: userId },
+      attributes: ["last_used_password"],
     });
+    if (!getPasswordList) {
+      payload.last_used_password = JSON.stringify([newPasswordToHash]);
+    } else {
+      const lastUsedPassword = JSON.parse(getPasswordList.last_used_password);
+      //check if new password is same as last 5 password
+      for (let i = 0; i < lastUsedPassword.length; i++) {
+        const isSame = await bcrypt.compare(new_password, lastUsedPassword[i]);
+        if (isSame) {
+          return errorResponse(
+            req,
+            res,
+            "Can't use the old password, please try other combination"
+          );
+        }
+      }
+      if (lastUsedPassword.length >= 5) {
+        lastUsedPassword.shift();
+        lastUsedPassword.push(newPasswordToHash);
+      } else {
+        lastUsedPassword.push(newPasswordToHash);
+      }
+      payload.last_used_password = JSON.stringify(lastUsedPassword);
+    }
+
+    await db.USERS.update(
+      payload,
+      {
+        where: { id: userId },
+      },
+      {
+        transaction: dbTransaction,
+      }
+    );
+    await dbTransaction.commit();
     return successResponse(req, res, "Success Changing Password");
   } catch (error) {
+    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
 
+export const TokenCheck = async (req, res) => {
+  const { access_token } = req.body.rq_body;
+  if (!access_token) {
+    return errorResponse(req, res, "Credential is missing");
+  }
+
+  try {
+    const token = await db.TOKEN.findOne({
+      where: {
+        token: access_token,
+        type: constant.TOKEN_TYPE_ACCESS,
+        expired_at: {
+          [Op.gte]: new Date(),
+        },
+      },
+    });
+
+    if (!token) {
+      const tokenSession = await db.TOKEN.findOne({
+        where: {
+          token: access_token,
+          type: constant.TOKEN_TYPE_SESSION,
+          expired_at: {
+            [Op.gte]: new Date(),
+          },
+        },
+        raw: true,
+      });
+      if (!tokenSession) {
+        return errorResponse(req, res, "Invalid Credential");
+      }
+      
+      await db.TOKEN.create({
+        token: access_token,
+        type: constant.TOKEN_TYPE_ACCESS,
+        user_id: tokenSession.user_id,
+        issued_at: new Date(),
+        expired_at: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
+        id: uniqueId(),
+      });
+    }
+
+    return successResponse(req, res, { valid: true });
+  } catch (error) {
+    return errorResponse(req, res, error.message);
+  }
+};
 //NOT USED
 async function generateAndSetNewRefreshToken(userId) {
   try {
@@ -332,7 +451,7 @@ const handleAccountLock = async (user) => {
   return null;
 };
 
-const checkPasswordChangeEligibility = async (user) => {
+const checkPasswordChangeEligibility = async (user, transaction) => {
   if (user && user.password_changed_at) {
     const minChangePasswordDuration = 24 * 60 * 60 * 1000; // Base lock duration (24 hour)
     const maxChangePasswordDuration = 90 * 24 * 60 * 60 * 1000;
@@ -352,14 +471,7 @@ const checkPasswordChangeEligibility = async (user) => {
       } ${timeLeftMinutes % 60} minutes, and ${timeLeftSeconds % 60} seconds`;
     } else {
       // Unlock the account if the lock duration has passed
-      await db.USERS.update(
-        {
-          password_changed_at: new Date(),
-        },
-        {
-          where: { user_id: user.user_id },
-        }
-      );
+
       return null; // Password change is allowed
     }
   }

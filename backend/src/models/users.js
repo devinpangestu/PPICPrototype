@@ -60,7 +60,9 @@ export default (sequelize, DataTypes) => {
       // this.hasMany(models.OFFERS, {
       //   foreignKey: "updated_by_id",
       // });
-
+      this.hasOne(models.OFFERS, {
+        foreignKey: "buyer_id",
+      });
       this.hasOne(models.MASTER_ROUTE_LOCATION, {
         foreignKey: "created_by_id",
       });
@@ -108,6 +110,10 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING,
       },
       password: {
+        allowNull: false,
+        type: DataTypes.TEXT,
+      },
+      last_used_password: {
         allowNull: false,
         type: DataTypes.TEXT,
       },

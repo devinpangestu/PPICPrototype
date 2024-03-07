@@ -124,7 +124,7 @@ export const PageContainerNoRestrictions = ({
       "menu-prices",
       "menu-logistic",
       "menu-admin",
-      "menu-config"
+      "menu-config",
     );
   }
 
@@ -148,11 +148,7 @@ export const PageContainerNoRestrictions = ({
         defaultSelectedKeys={[window.location.pathname]}
         mode="inline"
       >
-        <Menu.SubMenu
-          key="menu-commodity"
-          icon={<TableOutlined />}
-          title={t("commodity")}
-        >
+        <Menu.SubMenu key="menu-commodity" icon={<TableOutlined />} title={t("commodity")}>
           <Menu.Item key="/">
             <NavLink to={"/"}>{t("dashboard")}</NavLink>
           </Menu.Item>
@@ -167,27 +163,17 @@ export const PageContainerNoRestrictions = ({
           </Menu.Item>
         </Menu.SubMenu>
         <Menu.Divider />
-        
-          <Menu.SubMenu
-            key="menu-logistic"
-            icon={<AppstoreOutlined />}
-            title={t("logistic")}
-          >
-            <Menu.Item key="/logistic/dashboard">
-              <NavLink to={"/logistic/dashboard"}>{t("dashboard")}</NavLink>
-            </Menu.Item>
+        <Menu.SubMenu key="menu-logistic" icon={<AppstoreOutlined />} title={t("logistic")}>
+          <Menu.Item key="/logistic/dashboard">
+            <NavLink to={"/logistic/dashboard"}>{t("dashboard")}</NavLink>
+          </Menu.Item>
 
-            <Menu.Item key="/logistic/transportir">
-              <NavLink to={"/logistic/transportir"}>{t("transportir")}</NavLink>
-            </Menu.Item>
-          </Menu.SubMenu>
-          <Menu.Divider />
-       
-        <Menu.SubMenu
-          key="menu-config"
-          icon={<SettingOutlined />}
-          title={t("config")}
-        >
+          <Menu.Item key="/logistic/transportir">
+            <NavLink to={"/logistic/transportir"}>{t("transportir")}</NavLink>
+          </Menu.Item>
+        </Menu.SubMenu>
+        <Menu.Divider />
+        <Menu.SubMenu key="menu-config" icon={<SettingOutlined />} title={t("config")}>
           <Menu.Item key="/config">
             <NavLink to={"/config"}>{t("general")}</NavLink>
           </Menu.Item>
@@ -201,22 +187,14 @@ export const PageContainerNoRestrictions = ({
             <NavLink to={"/config/warehouse"}>{t("warehouse")}</NavLink>
           </Menu.Item>
           <Menu.Item key="/config/handover-location">
-            <NavLink to={"/config/handover-location"}>
-              {t("handoverLocation")}
-            </NavLink>
+            <NavLink to={"/config/handover-location"}>{t("handoverLocation")}</NavLink>
           </Menu.Item>
           <Menu.Item key="/config/budget-transportir">
-            <NavLink to={"/config/budget-transportir"}>
-              {t("budgetTransportir")}
-            </NavLink>
+            <NavLink to={"/config/budget-transportir"}>{t("budgetTransportir")}</NavLink>
           </Menu.Item>
         </Menu.SubMenu>
         ,
-        <Menu.SubMenu
-          key="menu-admin"
-          icon={<UserOutlined />}
-          title={t("superAdmin")}
-        >
+        <Menu.SubMenu key="menu-admin" icon={<UserOutlined />} title={t("superAdmin")}>
           <Menu.Item key="/admin/users">
             <NavLink to="/admin/users">{t("employee")}</NavLink>
           </Menu.Item>
@@ -250,8 +228,7 @@ export const PageContainerNoRestrictions = ({
     if (window.innerWidth >= constant.MOBILE_MAX_WIDTH) {
       siderWidth = constant.MOBILE_MAX_WIDTH;
       if (siderVisible) {
-        const siderFromLeft =
-          (document.body.clientWidth - constant.MOBILE_MAX_WIDTH) / 2;
+        const siderFromLeft = (document.body.clientWidth - constant.MOBILE_MAX_WIDTH) / 2;
         siderStyle.left = siderFromLeft;
         maskStyle.left = -siderFromLeft;
       }
@@ -286,9 +263,7 @@ export const PageContainerNoRestrictions = ({
                 onClick={() => {
                   setSiderVisible(!siderVisible);
                 }}
-                icon={
-                  siderVisible ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
-                }
+                icon={siderVisible ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               />
             </Col>
             {!utils.isMobile() && (
@@ -307,11 +282,7 @@ export const PageContainerNoRestrictions = ({
                         const lastIdx = idx === breadcrumbs.length - 1;
                         return (
                           <Breadcrumb.Item key={el.text}>
-                            {!lastIdx ? (
-                              <Link to={el.link}>{el.text}</Link>
-                            ) : (
-                              el.text
-                            )}
+                            {!lastIdx ? <Link to={el.link}>{el.text}</Link> : el.text}
                           </Breadcrumb.Item>
                         );
                       })}
@@ -371,7 +342,7 @@ export const PageContainerNoRestrictions = ({
                     ...constant.MODAL_CONFIRM_DANGER_PROPS,
                     content: "Are you sure want to logout?",
                     onOk: () => {
-                      handler.handleLogout();
+                      handler.handleLogoutClick();
                     },
                   });
                 }}

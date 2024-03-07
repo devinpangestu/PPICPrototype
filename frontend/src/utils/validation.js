@@ -2,6 +2,7 @@ import constant from "constant";
 import swalCommon from "./swal";
 import moment from "moment";
 
+
 export const isPriceMonthsValid = (prices = []) => {
   let lastMonthIdx = -1;
   for (const p of prices) {
@@ -22,11 +23,12 @@ export const isEmptyObj = (obj) => {
   );
 };
 
+export const isEmptyStr = (x) => {
+  return x === null || x === undefined || x === "";
+};
+
 export const isNull = (x) => {
-  if (!x && x !== 0 && x !== "0" && x !== false && x !== "") {
-    return true;
-  }
-  return false;
+  return !x || x === 0 || x === "0" || x === false || x === "";
 };
 
 // list is react select obj list

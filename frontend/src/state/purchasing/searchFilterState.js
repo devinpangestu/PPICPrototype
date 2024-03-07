@@ -7,8 +7,8 @@ export const useSearchFilterStore = create((set) => ({
   suppliers: [],
   setSuppliers: (data) => set({ suppliers: data }),
 
-  PPICs: [],
-  setPPICs: (data) => set({ PPICs: data }),
+  purchasing: [],
+  setPurchasing: (data) => set({ purchasing: data }),
 
   filterStatus: null,
   setFilterStatus: (status) => set({ filterStatus: status }),

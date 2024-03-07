@@ -14,7 +14,6 @@ const histories = {
     if (otherParam) {
       finalParams = { ...params, ...otherParam };
     }
-    console.log(otherParam, "xixixi");
 
     return axios({
       method: "get",

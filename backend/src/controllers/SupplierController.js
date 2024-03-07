@@ -3,7 +3,8 @@ import { successResponse, errorResponse, uniqueId } from "../helpers/index.js";
 import { Sequelize, Op } from "sequelize";
 import { getSupplierID, getUserID, getUserName } from "../utils/auth.js";
 import { getOutsQtyEachPOSKU } from "../utils/checker.js";
-import e from "express";
+import moment from "moment";
+import { constant } from "../constant/index.js";
 import { filterDoubleFind, filterDoubleFindCount } from "../utils/filter.js";
 
 export const SupplierScheduleList = async (req, res) => {
@@ -28,7 +29,7 @@ export const SupplierScheduleList = async (req, res) => {
     };
     if (supplierId) {
       whereClause[Op.and].push({ supplier_id: supplierId });
-    } //TODO: ADD THIS AFTER COMPLETE
+    }
 
     const data = await db.OFFERS.findAndCountAll({
       include: [
@@ -194,7 +195,7 @@ export const SupplierScheduleGetPOQtyAndDate = async (req, res) => {
     return errorResponse(req, res, error.message);
   }
 };
-//TODO : ADD THIS AFTER COMPLETE
+
 export const SupplierScheduleEdit = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -233,55 +234,102 @@ export const SupplierScheduleEdit = async (req, res) => {
     }
 
     for (let key in schedules) {
+      console.log(237);
       if (schedules[key].flag_status == "E") {
         //original schedule
+        console.log(239);
+        let getExistingNotes = JSON.parse(
+          ori_schedules.find((x) => x.id == schedules[key].id)?.notes
+        );
+        console.log(243);
+        let getExistingHistory = JSON.parse(
+          ori_schedules.find((x) => x.id == schedules[key].id)?.history
+        );
+        console.log(246);
+        console.log(getExistingNotes);
+        await db.OFFERS.update(
+          {
+            is_edit: true,
+            history: JSON.stringify([
+              ...(getExistingHistory || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule edited by ${userName} from ${moment(
+                  ori_schedules.find((x) => x.id == schedules[key].id)
+                    .est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} to ${
+                  schedules[key].est_delivery
+                } with qty ${moment(schedules[key].qty_delivery).format(
+                  constant.FORMAT_DISPLAY_DATE
+                )}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            updated_by_id: userId,
+            updated_at: new Date(),
+          },
+          {
+            where: { id: schedules[key].id },
+          },
+          { dbTransaction }
+        );
+        console.log(275);
 
-        await Promise.all([
-          await db.OFFERS.update(
-            {
-              is_edit: true,
-              updated_by_id: userId,
-              updated_at: new Date(),
-            },
-            {
-              where: { id: schedules[key].id },
-            },
-            { dbTransaction }
-          ),
-          await db.OFFERS.create(
-            {
-              po_number: schedules[key].po_number,
-              supplier_id: parseInt(schedules[key].supplier_id),
-              submission_date: new Date(schedules[key].submission_date),
-              po_qty: parseInt(schedules[key].po_qty),
-              po_outs: parseInt(schedules[key].po_outs),
-              sku_code: schedules[key].sku_code,
-              sku_name: schedules[key].sku_name,
-              notes: JSON.stringify({
-                edit_req_sup: schedules[key].notes,
-                updated_by: userName,
-                updated_at: new Date(),
-              }),
-              est_delivery: new Date(
-                ori_schedules.find(
-                  (x) => x.id == schedules[key].id
-                )?.est_delivery
-              ),
-              qty_delivery: ori_schedules.find((x) => x.id == schedules[key].id)
-                ?.qty_delivery,
-              est_submitted_date: new Date(schedules[key].est_delivery),
-              submitted_qty: schedules[key].qty_delivery,
-              flag_status: "F",
-              is_edit: false,
-              edit_from_id: schedules[key].id,
-              created_by_id: schedules[key].created_by_id,
-              created_at: new Date(),
-              updated_by_id: userId,
-              updated_at: new Date(),
-            },
-            { dbTransaction }
-          ),
-        ]);
+        await db.OFFERS.create(
+          {
+            po_number: schedules[key].po_number,
+            supplier_id: parseInt(schedules[key].supplier_id),
+            submission_date: new Date(schedules[key].submission_date),
+            po_qty: parseInt(schedules[key].po_qty),
+            po_outs: parseInt(schedules[key].po_outs),
+            sku_code: schedules[key].sku_code,
+            sku_name: schedules[key].sku_name,
+            notes: JSON.stringify({
+              ...(getExistingNotes || []),
+              edit_req: {
+                notes: schedules[key].notes,
+                created_by: userName,
+                created_at: new Date(),
+              },
+            }),
+            history: JSON.stringify([
+              ...(getExistingHistory || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Request edit schedule by ${userName} from ${moment(
+                  ori_schedules.find((x) => x.id == schedules[key].id)
+                    .est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} to ${moment(
+                  schedules[key].est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} with qty ${
+                  schedules[key].qty_delivery
+                }`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            est_delivery: new Date(
+              ori_schedules.find((x) => x.id == schedules[key].id)?.est_delivery
+            ),
+            qty_delivery: ori_schedules.find((x) => x.id == schedules[key].id)
+              ?.qty_delivery,
+            est_submitted_date: new Date(schedules[key].est_delivery),
+            submitted_qty: schedules[key].qty_delivery,
+            flag_status: "F",
+            is_edit: false,
+            edit_from_id: schedules[key].id,
+            created_by_id: schedules[key].created_by_id,
+            created_at: new Date(),
+            updated_by_id: userId,
+            updated_at: new Date(),
+            buyer_id: schedules[key].buyer_id,
+          },
+          { dbTransaction }
+        );
+        console.log(345);
       }
     }
 
@@ -338,6 +386,18 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
     }
 
     for (let key in schedules) {
+      if (schedules[key].qty_delivery == 0) {
+        return errorResponse(
+          req,
+          res,
+          "Jumlah quantity yang di split tidak boleh 0, silahkan cek kembali"
+        );
+      }
+    }
+
+    const getExistingNotes = JSON.parse(offerToSplitted.notes);
+    const getExistingHistory = JSON.parse(offerToSplitted.history);
+    for (let key in schedules) {
       //create
       let payloadForSplittedSchedule;
       if (schedules[key].split_from_id == null) {
@@ -348,10 +408,27 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
           submitted_qty: schedules[key].qty_delivery,
           split_from_id: offer_id,
           notes: JSON.stringify({
-            split_req_sup: schedules[key].notes,
-            updated_by: userName,
-            updated_at: new Date(),
+            ...getExistingNotes,
+            split_req: {
+              notes: schedules[key].notes,
+              created_by: userName,
+              created_at: new Date(),
+            },
           }),
+          history: JSON.stringify([
+            ...(getExistingHistory || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Request split schedule by ${userName} from ${
+                offerToSplitted.est_delivery
+              } to ${schedules[key].est_delivery} with qty ${
+                schedules[key].qty_delivery
+              }`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           flag_status: "F",
         };
       } else {
@@ -362,10 +439,27 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
           est_submitted_date: new Date(schedules[key].est_delivery),
           submitted_qty: schedules[key].qty_delivery,
           notes: JSON.stringify({
-            split_req_sup: schedules[key].notes,
-            updated_by: userName,
-            updated_at: new Date(),
+            ...getExistingNotes,
+            split_req: {
+              notes: schedules[key].notes,
+              created_by: userName,
+              created_at: new Date(),
+            },
           }),
+          history: JSON.stringify([
+            ...(getExistingHistory || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Request split schedule by ${userName} from ${
+                offerToSplitted.est_delivery
+              } to ${schedules[key].est_delivery} with qty ${
+                schedules[key].qty_delivery
+              }`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           split_from_id: schedules[key].split_from_id,
           flag_status: "F",
         };
@@ -376,6 +470,18 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
     //update original schedule
     const payloadForOriginalSchedule = {
       ...offerToSplitted.dataValues,
+      history: JSON.stringify([
+        ...(getExistingHistory || []),
+        {
+          detail: `${moment().format(
+            constant.FORMAT_DISPLAY_DATETIME
+          )} Request split schedule by ${userName} to ${
+            schedules.length
+          } schedules`,
+          created_at: new Date(),
+          created_by: userName,
+        },
+      ]),
       is_split: true,
     };
     await db.OFFERS.update(
@@ -389,6 +495,67 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
     await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule splitted");
+  } catch (error) {
+    await dbTransaction.rollback();
+
+    return errorResponse(req, res, error.message);
+  }
+};
+
+export const SupplierScheduleClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const id = req.params.id;
+
+    const userId = getUserID(req);
+    const userName = getUserName(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const offerToSplitted = await db.OFFERS.findOne({
+      where: { id, deleted_at: null },
+      attributes: {
+        exclude: ["id"],
+      },
+    });
+
+    const getExistingNotes = JSON.parse(offerToSplitted.notes);
+    const getExistingHistory = JSON.parse(offerToSplitted.history);
+
+    //update original schedule
+    const payloadForOriginalSchedule = {
+      ...offerToSplitted.dataValues,
+      history: JSON.stringify([
+        ...(getExistingHistory || []),
+        {
+          detail: `${moment().format(
+            constant.FORMAT_DISPLAY_DATETIME
+          )} Request Close PO schedule by ${userName} for ${
+            offerToSplitted.po_number
+          } item ${offerToSplitted.sku_name} and outstanding qty ${
+            offerToSplitted.po_outs
+          }`,
+          created_at: new Date(),
+          created_by: userName,
+        },
+      ]),
+      flag_status: "F",
+    };
+    await db.OFFERS.update(
+      payloadForOriginalSchedule,
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
+    await dbTransaction.commit();
+
+    return successResponse(req, res, "Schedule go to close PO");
   } catch (error) {
     await dbTransaction.rollback();
 
@@ -432,6 +599,17 @@ export const SupplierScheduleConfirm = async (req, res) => {
             flag_status: "X",
             est_submitted_date: getAnotherIfExist[key].est_delivery,
             submitted_qty: getAnotherIfExist[key].qty_delivery,
+            history: JSON.stringify([
+              ...(JSON.parse(getAnotherIfExist[key].history) || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule confirmed by ${userName}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+
             updated_at: new Date(),
             updated_by_id: userId,
           },
@@ -444,7 +622,6 @@ export const SupplierScheduleConfirm = async (req, res) => {
     } else {
       const qtyData = await db.OFFERS.findOne({
         where: { id, deleted_at: null },
-        attributes: ["qty_delivery", "est_delivery"],
       });
 
       await db.OFFERS.update(
@@ -452,6 +629,16 @@ export const SupplierScheduleConfirm = async (req, res) => {
           submitted_qty: qtyData.qty_delivery,
           est_submitted_date: qtyData.est_delivery,
           flag_status: "X",
+          history: JSON.stringify([
+            ...(JSON.parse(qtyData.history) || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Schedule confirmed by ${userName}`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
           updated_at: new Date(),
           updated_by_id: userId,
         },
@@ -487,6 +674,17 @@ export const SupplierScheduleConfirmSelectedData = async (req, res) => {
         {
           submitted_qty: schedules[key].qty_delivery,
           est_submitted_date: schedules[key].est_delivery,
+          history: JSON.stringify([
+            ...(JSON.parse(schedules[key].history) || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Schedule confirmed by ${userName}`,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
+
           flag_status: "X",
           updated_at: new Date(),
           updated_by_id: userId,

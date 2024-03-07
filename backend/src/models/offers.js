@@ -28,6 +28,7 @@ export default (sequelize, DataTypes) => {
       });
       this.belongsTo(models.USERS, {
         foreignKey: "buyer_id",
+        as: "buyer",
       });
       this.hasOne(models.SUPPLIERS, {
         foreignKey: {
@@ -50,8 +51,8 @@ export default (sequelize, DataTypes) => {
         defaultValue: DataTypes.NOW,
         type: DataTypes.DATE,
       },
+
       supplier_id: {
-        allowNull: false,
         type: DataTypes.NUMERIC,
         references: {
           model: "SUPPLIERS",
@@ -62,20 +63,29 @@ export default (sequelize, DataTypes) => {
         defaultValue: null,
         type: DataTypes.STRING,
       },
-      po_qty: {
+      category_filter: {
+        defaultValue: null,
+        type: DataTypes.STRING,
+      },
+      io_filter: {
+        defaultValue: null,
+        type: DataTypes.STRING,
+      },
+      line_num: {
         defaultValue: null,
         type: DataTypes.NUMERIC,
         validate: {
           isInt: true,
         },
       },
+      po_qty: {
+        defaultValue: null,
+        type: DataTypes.FLOAT,
+      },
       po_outs: {
         // allowNull: false,
         defaultValue: null,
-        type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
+        type: DataTypes.FLOAT,
       },
       sku_code: {
         allowNull: false,
@@ -90,39 +100,34 @@ export default (sequelize, DataTypes) => {
       qty_delivery: {
         allowNull: false,
         defaultValue: null,
-        type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
+        type: DataTypes.FLOAT,
       },
       est_delivery: {
         defaultValue: DataTypes.NOW,
         type: DataTypes.DATE,
       },
-
-      revised_qty: { defaultValue: null, type: DataTypes.NUMERIC },
+      hutang_kirim: {
+        defaultValue: false,
+        type: DataTypes.BOOLEAN,
+      },
+      revised_qty: { defaultValue: null, type: DataTypes.FLOAT },
       est_revised_date: {
         defaultValue: null,
         type: DataTypes.DATE,
       },
       submitted_qty: {
         defaultValue: null,
-        type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
+        type: DataTypes.FLOAT,
       },
       est_submitted_date: { defaultValue: null, type: DataTypes.DATE },
       gr_qty: {
         defaultValue: null,
         type: DataTypes.NUMERIC,
-        validate: {
-          isInt: true,
-        },
       },
       flag_status: { defaultValue: "A", type: DataTypes.STRING },
       buyer_id: { defaultValue: null, type: DataTypes.NUMERIC },
       notes: { defaultValue: null, type: DataTypes.TEXT },
+      history: { defaultValue: null, type: DataTypes.TEXT },
       edit_from_id: { defaultValue: null, type: DataTypes.NUMERIC },
       is_edit: { defaultValue: false, type: DataTypes.BOOLEAN },
       split_from_id: { defaultValue: null, type: DataTypes.NUMERIC },

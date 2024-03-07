@@ -24,6 +24,8 @@ import {
   MenuFoldOutlined,
   SettingOutlined,
   AppstoreOutlined,
+  ScheduleOutlined,
+  ShoppingCartOutlined,
   UserOutlined,
   TableOutlined,
   PoweroffOutlined,
@@ -114,7 +116,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.SubMenu
               key="menu-PPIC"
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
-              icon={<TableOutlined />}
+              icon={<ScheduleOutlined />}
               title={t("ppic")}
             >
               {utils.renderWithPermission(
@@ -153,7 +155,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
           <Menu.SubMenu
             style={{ fontSize: conditionalMobileState("10px", "14px") }}
             key="menu-purchasing"
-            icon={<SettingOutlined />}
+            icon={<ShoppingCartOutlined />}
             title={t("Procurement")}
           >
             <Menu.Item key="/procurement/dashboard">
@@ -195,7 +197,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.SubMenu
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
               key="menu-transaction"
-              icon={<AppstoreOutlined />}
+              icon={<ScheduleOutlined />}
               title={t("Transaction")}
             >
               {utils.renderWithPermission(
@@ -290,7 +292,18 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
       setSiderVisible(false);
     }
   }, [mobileView]);
-
+  useEffect(() => {
+    const handleContextMenu = (event) => {
+      // Prevent the right-click context menu
+      event.preventDefault();
+    };
+    // Add event listener when the component mounts
+    document.addEventListener("contextmenu", handleContextMenu);
+    // Clean up the event listener when the component unmounts
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
   return (
     <Layout className={layoutWrapperCls}>
       <Layout className="site-layout">
@@ -395,7 +408,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                     ...constant.MODAL_CONFIRM_DANGER_PROPS,
                     content: "Are you sure want to logout?",
                     onOk: () => {
-                      handler.handleLogout();
+                      handler.handleLogoutClick();
                     },
                   });
                 }}

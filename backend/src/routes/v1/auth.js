@@ -3,7 +3,8 @@ import * as AuthController from "../../controllers/AuthController.js";
 
 const router = express.Router();
 
-router.get("/",AuthController.GetAuthenticatedUser)
+router.get("/", AuthController.GetAuthenticatedUser);
+router.post("/token-check", AuthController.TokenCheck);
 router.post("/login", AuthController.Login);
 router.post("/login-refresh-token", AuthController.LoginRfToken);
 router.post("/logout", AuthController.Logout);

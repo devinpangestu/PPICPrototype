@@ -55,6 +55,17 @@ router.put(
   verifyTokenAndRole("purchasing@edit"),
   PurchasingController.PurchasingScheduleRejectEditSupplier
 );
+
+router.put(
+  "/accept-close-po",
+  verifyTokenAndRole("purchasing@edit"),
+  PurchasingController.PurchasingScheduleAcceptClosePOSupplier
+);
+router.put(
+  "/reject-close-po",
+  verifyTokenAndRole("purchasing@edit"),
+  PurchasingController.PurchasingScheduleRejectClosePOSupplier
+);
 router.get(
   "/:id",
   verifyTokenAndRole("purchasing@view"),

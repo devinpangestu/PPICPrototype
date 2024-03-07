@@ -7,7 +7,7 @@ export const renderNullable = (renderEl) => {
 
 export const thousandSeparator = (x, suffix = null) => {
   if (isNull(x)) {
-    return "-";
+    return "0";
   }
 
   const parts = x.toString().split(".");

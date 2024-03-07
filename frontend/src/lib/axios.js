@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from "uuid";
 import constant from "constant";
 import errors from "errors";
 import utils from "utils";
-import { VITE_API_TIMEOUT } from "../../public/config";
 
 // for multiple requests
 let isRefreshing = false;
@@ -23,7 +22,7 @@ const processQueue = (error, token = null) => {
 
 const baseAxios = axios.create({
   baseURL: constant.API_BASE_URL,
-  timeout: VITE_API_TIMEOUT || 30000,
+  timeout: localStorage.getItem("api_timeout") || 60000,
   headers: {
     "Content-Type": "application/json",
     "X-Request-Id": uuidv4(),

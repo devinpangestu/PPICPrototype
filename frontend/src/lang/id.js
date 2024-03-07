@@ -9,6 +9,7 @@ export const id = {
     SKUName: "Nama SKU",
     qtyDelivery: "Qty Pengiriman",
     estDelivery: "Rencana Kirim",
+    buyerName: "Nama Pembeli",
 
     recommendation: "Rekomen",
     yes: "Ya",
@@ -38,6 +39,7 @@ export const id = {
     transactions: "Transaksi",
     transactionDate: "Tanggal transaksi",
     bulking: "Bulking",
+    mass: "Mass",
     new: "New",
     // employee
     employee: "Karyawan",
@@ -46,6 +48,7 @@ export const id = {
     name: "Nama",
     role: "Role",
     action: "Action",
+    oracleUsername: "Username Oracle",
 
     // supplier
     supplierData: "Data Supplier",
@@ -73,6 +76,8 @@ export const id = {
     status: "Status",
     dealer: "Dealer",
     dealerNotes: "Catatan dealer",
+    autoFill: "Isi Otomatis",
+    hutangKirim: "Hutang Kirim",
     isRecommended: "Recommended",
     analyst: "Analis",
     analystNotes: "Catatan analis",

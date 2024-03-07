@@ -143,6 +143,7 @@ export const TransactionPOList = async (req, res) => {
         attributes: [
           [Sequelize.fn("DISTINCT", Sequelize.col("po_number")), "po_number"],
         ],
+        raw: true,
         where: whereOfferClause,
         limit: parseInt(page_size),
         offset: (parseInt(page_number) - 1) * parseInt(page_size),
@@ -156,7 +157,7 @@ export const TransactionPOList = async (req, res) => {
             {
               model: db.SUPPLIERS,
               as: "supplier",
-              attributes: ["name"],
+              attributes: ["ref_id", "name"],
             },
           ],
           where: {
@@ -164,8 +165,8 @@ export const TransactionPOList = async (req, res) => {
             deleted_at: null,
           },
         });
-        getAllPONumber.rows[key].dataValues.supplier_name =
-          getSupplierNameEveryPO?.supplier?.name;
+        getAllPONumber.rows[key].supplier_name =
+          getSupplierNameEveryPO?.dataValues.supplier?.name;
         const countSKUInOnePO = await db.OFFERS.findAndCountAll({
           attributes: [
             [Sequelize.fn("DISTINCT", Sequelize.col("sku_code")), "sku_code"],
@@ -177,8 +178,7 @@ export const TransactionPOList = async (req, res) => {
           },
           group: ["sku_code", "sku_name"],
         });
-        getAllPONumber.rows[key].dataValues.sku_count =
-          countSKUInOnePO.count.length;
+        getAllPONumber.rows[key].sku_count = countSKUInOnePO.count.length;
 
         getAllPONumber.count = countSKUInOnePO.count.length;
 
@@ -190,10 +190,10 @@ export const TransactionPOList = async (req, res) => {
             edit_from_id: null,
             split_from_id: null,
           },
+          raw: true,
         });
 
-        getAllPONumber.rows[key].dataValues.total_schedule =
-          countTotalSchedule.count;
+        getAllPONumber.rows[key].total_schedule = countTotalSchedule.count;
 
         const countCompleteSchedule = await db.OFFERS.findAndCountAll({
           attributes: [
@@ -206,9 +206,19 @@ export const TransactionPOList = async (req, res) => {
             split_from_id: null,
             flag_status: "X",
           },
+          raw: true,
         });
-        getAllPONumber.rows[key].dataValues.complete_schedule =
+        getAllPONumber.rows[key].complete_schedule =
           countCompleteSchedule.count;
+
+        const getScheduleList = await db.OFFERS.findAll({
+          raw: true,
+          where: {
+            po_number: getAllPONumber.rows[key].po_number,
+            deleted_at: null,
+          },
+        });
+        getAllPONumber.rows[key].schedules = getScheduleList;
       }
 
       const { dataFilter, countFilter } = filterDoubleFindCount(getAllPONumber);
@@ -232,6 +242,31 @@ export const TransactionPOList = async (req, res) => {
             ],
           },
           { deleted_at: null },
+          {
+            [Op.or]: [
+              { flag_status: "A" },
+              { flag_status: "B" },
+              { flag_status: "C" },
+              { flag_status: "D" },
+              {
+                [Op.and]: [
+                  { flag_status: "E" },
+                  { is_edit: false },
+                  { is_split: false },
+                  { split_from_id: null },
+                  { edit_from_id: null },
+                ],
+              },
+              { flag_status: "X" },
+              literal(`(
+                flag_status IN ('F', 'G') AND
+                (
+                  (flag_status = 'F' AND edit_from_id IS NULL) OR
+                  (flag_status = 'G' AND split_from_id IS NULL)
+                )
+              )`),
+            ],
+          },
         ],
       };
       whereOfferClause[Op.and].push({
@@ -264,9 +299,20 @@ export const TransactionPOList = async (req, res) => {
             "sku_code",
             [Sequelize.fn("COUNT", "id"), "offer_count"], // Count the number of offers for each sku_code
           ],
+          raw: true,
           where: whereOfferClause,
           group: ["sku_code", "sku_name"],
         });
+        const getScheduleData = await db.OFFERS.findAll({
+          raw: true,
+          where: whereOfferClause,
+        });
+        for (let key in getAllPONumber) {
+          getAllPONumber[key].schedules = getScheduleData.filter((data) => {
+            return data.sku_code === getAllPONumber[key].sku_code ? data : null;
+          });
+        }
+
         return successResponse(req, res, {
           transactions: getAllPONumber,
         });

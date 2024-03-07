@@ -14,7 +14,7 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
 
   const [pageLoading, setPageLoading] = useState(false);
   const [roles, setRoles] = useState([]);
-
+  const [purchasingValue, setPurchasingValue] = useState(false);
   useEffect(() => {
     handler.getRoles(setPageLoading, setRoles);
   }, []);
@@ -31,10 +31,15 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
         .then(function (response) {
           const user = response.data.rs_body;
           console.log(user);
+          user.role.id === constant.ROLE_PURCHASING
+            ? setPurchasingValue(true)
+            : setPurchasingValue(false);
           form.setFieldsValue({
             role: roles.find((el) => el.value === user.role.id).value,
             user_id: user.user_id,
             name: user.name,
+            email: user.email,
+            oracle_username: user.oracle_username,
           });
         })
         .catch(function (error) {
@@ -63,10 +68,12 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
 
   const handleOnSubmit = (values) => {
     setPageLoading(true);
+
     const user = {
       user_id: values.user_id,
       role_id: values.role,
       name: values.name,
+      email: values.email,
     };
     if (isEdit) {
       api.users
@@ -123,7 +130,7 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
         form={form}
         onFinish={handleOnSubmit}
         autoComplete="off"
-        labelCol={{ span: 4 }}
+        labelCol={{ span: 8 }}
         wrapperCol={{ span: 20 }}
       >
         <Row>
@@ -163,8 +170,41 @@ const UserForm = ({ isEdit, userId, onCancel, onSuccess }) => {
                 },
               ]}
             >
-              <Select placeholder={`${t("select")} ${t("role")}`} options={roles} />
+              <Select
+                placeholder={`${t("select")} ${t("role")}`}
+                options={roles}
+                onChange={(value) => {
+                  setPurchasingValue(value === constant.ROLE_PURCHASING);
+                }}
+              />
             </Form.Item>
+            {purchasingValue && (
+              <Form.Item
+                label="Oracle Username"
+                name="oracle_username"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("select")} ${t("oracleUsername")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("oracleUsername")}`} />
+              </Form.Item>
+            )}
+            <Form.Item
+              label={t("Email")}
+              name="email"
+              rules={[
+                {
+                  required: false,
+                  message: `${t("please")} ${t("input")} ${t("email")}`,
+                },
+              ]}
+            >
+              <Input placeholder={`${t("input")} ${t("email")}`} />
+            </Form.Item>
+
             <Form.Item wrapperCol={{ span: 24 }} className="mb-0 text-right">
               <Button type="secondary" className="mr-2" onClick={onCancel}>
                 {t("cancel")}

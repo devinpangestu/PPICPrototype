@@ -29,4 +29,6 @@ router.put(
   UserController.UserResetPwd
 );
 
+router.get("/:token_id/verify/:token_frag", UserController.UserVerifyEmail);
+
 export default router;
