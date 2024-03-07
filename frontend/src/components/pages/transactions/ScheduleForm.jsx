@@ -124,11 +124,17 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         auto_fill: true,
       };
     } else {
+      console.log("sini");
       modalConfirmObj = {
+        id,
+        is_edit: isEdit,
         submission_date: moment(values.submission_date).format(constant.FORMAT_API_DATE),
         io_filter: values.io_filter,
         category_filter: values.category_filter,
-        supplier_name: values.supplier_name,
+        supplier: {
+          ref_id: values.supplier_name,
+          name: suppliers.find((sup) => sup.value === values.supplier_name).label,
+        },
         po_number: values.po_number,
         po_qty: parseInt(values.po_qty),
         po_outs: parseInt(values.po_outs),
@@ -138,10 +144,12 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         est_delivery: moment(values.est_delivery).format(constant.FORMAT_API_DATE),
         auto_fill: false,
       };
+      console.log("sini2");
     }
     if (isEdit) {
+      console.log("sini3");
       api.ppic
-        .edit(id, modalConfirmObj)
+        .edit(modalConfirmObj)
         .then(function (response) {
           onSuccess();
         })

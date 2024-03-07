@@ -13,10 +13,9 @@ export const sendEmailVerification = async (email, subject, password) => {
         user: env.EMAIL_USERNAME,
         pass: env.EMAIL_PASSWORD,
       },
-      //   tls: {
-      //     ciphers: "SSLv3",
-      //     rejectUnauthorized: false,
-      //   },
+      tls: {
+        ciphers: "SSLv3",
+      },
     });
     const baseUrl = `${process.env.BASE_URL}:${process.env.API_PORT}`;
     const mailOptions = {
@@ -414,7 +413,9 @@ export const sendEmailVerification = async (email, subject, password) => {
         return console.log(error);
       }
 
-      console.log(`Message sent to ${email}: ` + info.response);
+      console.log(
+        `Message sent from ${env.EMAIL_USERNAME} to ${email}: ` + info.response
+      );
     });
   } catch (error) {
     console.log("error sending email", error);

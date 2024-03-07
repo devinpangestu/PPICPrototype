@@ -79,7 +79,7 @@ const ChangePassword = (props) => {
             Modal.success({
               ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
               onOk: () => {
-                handler.handleLogout();
+                handler.handleLogoutClick();
               },
             });
           })

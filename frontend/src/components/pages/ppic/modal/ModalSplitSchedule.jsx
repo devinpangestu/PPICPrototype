@@ -13,6 +13,7 @@ import {
   DatePicker,
   Typography,
   Descriptions,
+  Tag,
 } from "antd";
 import moment from "moment";
 import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
@@ -93,6 +94,20 @@ function ModalSplitSchedule(props) {
     setSplits([...splits, newSplit]);
     setNewSplit({ est_delivery: null, qty_delivery: null });
   };
+
+  const renderStatusTag = (color, text) => (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+        {text}
+      </Tag>
+    </div>
+  );
 
   return (
     data && (

@@ -20,6 +20,9 @@ function Login(props) {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [captchaValue, setCaptchaValue] = useState(null);
   useEffect(() => {
+    if (sessionStorage.getItem(constant.ACCESS_TOKEN)) {
+      localStorage.setItem(constant.ACCESS_TOKEN, sessionStorage.getItem(constant.ACCESS_TOKEN));
+    }
     if (utils.getUserInfo()) {
       redirectLogin();
     }
@@ -39,6 +42,7 @@ function Login(props) {
       .then(function (response) {
         const rsBody = response.data.rs_body;
         localStorage.setItem(constant.ACCESS_TOKEN, rsBody.access_token);
+        sessionStorage.setItem(constant.ACCESS_TOKEN, rsBody.access_token);
         if (rsBody.refresh_token) {
           localStorage.setItem(constant.REFRESH_TOKEN, rsBody.refresh_token);
         }

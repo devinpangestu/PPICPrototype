@@ -242,6 +242,31 @@ export const TransactionPOList = async (req, res) => {
             ],
           },
           { deleted_at: null },
+          {
+            [Op.or]: [
+              { flag_status: "A" },
+              { flag_status: "B" },
+              { flag_status: "C" },
+              { flag_status: "D" },
+              {
+                [Op.and]: [
+                  { flag_status: "E" },
+                  { is_edit: false },
+                  { is_split: false },
+                  { split_from_id: null },
+                  { edit_from_id: null },
+                ],
+              },
+              { flag_status: "X" },
+              literal(`(
+                flag_status IN ('F', 'G') AND
+                (
+                  (flag_status = 'F' AND edit_from_id IS NULL) OR
+                  (flag_status = 'G' AND split_from_id IS NULL)
+                )
+              )`),
+            ],
+          },
         ],
       };
       whereOfferClause[Op.and].push({
@@ -288,7 +313,6 @@ export const TransactionPOList = async (req, res) => {
           });
         }
 
-        console.log(getAllPONumber, "xixixi");
         return successResponse(req, res, {
           transactions: getAllPONumber,
         });

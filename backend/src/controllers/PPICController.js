@@ -285,9 +285,11 @@ export const PPICScheduleCreate = async (req, res) => {
       est_delivery,
       notes_ppic,
       auto_fill,
+      hutang_kirim,
       mass,
       buyer_name,
     } = req.body.rq_body;
+    console.log(req.body.rq_body);
     const isMass = req.query.mass;
     const userId = getUserID(req);
     const userName = getUserName(req);
@@ -329,11 +331,11 @@ export const PPICScheduleCreate = async (req, res) => {
             category_filter: rowToInsert?.category_filter,
             supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
             po_number: rowToInsert.po_number,
-            po_qty: Number(rowToInsert.po_qty),
-            po_outs: Number(rowToInsert.po_outs),
+            po_qty: parseFloat(rowToInsert.po_qty),
+            po_outs: parseFloat(rowToInsert.po_outs),
             sku_code: rowToInsert.sku_code,
             sku_name: rowToInsert.sku_name,
-            qty_delivery: Number(rowToInsert.qty_delivery),
+            qty_delivery: parseFloat(rowToInsert.qty_delivery),
             est_delivery: {
               [Op.between]: [
                 parsingStringToDateEarly(rowToInsert.est_delivery),
@@ -382,14 +384,14 @@ export const PPICScheduleCreate = async (req, res) => {
           }
         }
 
-        const [err, result] = await OpenQueryGetLineNum(
+        const [err, resultLine] = await OpenQueryGetLineNum(
           rowToInsert.po_number,
           rowToInsert.sku_code
         );
         if (!err) {
           return errorResponse(req, res, "Gagal mendapatkan data line number");
         }
-        if (result.length === 0) {
+        if (resultLine.length === 0) {
           return errorResponse(
             req,
             res,
@@ -409,7 +411,7 @@ export const PPICScheduleCreate = async (req, res) => {
         const getBuyerId = await db.USERS.findOne({
           attributes: ["id"],
           raw: true,
-          where: { oracle_username: result[0].BUYER_NAME },
+          where: { oracle_username: resultLine[0].BUYER_NAME },
         });
         if (!getBuyerId) {
           return errorResponse(
@@ -424,11 +426,11 @@ export const PPICScheduleCreate = async (req, res) => {
           category_filter: rowToInsert.category_filter,
           supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
           po_number: rowToInsert.po_number,
-          po_qty: Number(rowToInsert.po_qty),
-          po_outs: Number(rowToInsert.po_outs),
+          po_qty: parseFloat(rowToInsert.po_qty),
+          po_outs: parseFloat(rowToInsert.po_outs),
           sku_code: rowToInsert.sku_code,
           sku_name: rowToInsert.sku_name,
-          qty_delivery: Number(rowToInsert.qty_delivery),
+          qty_delivery: parseFloat(rowToInsert.qty_delivery),
           est_delivery: rowToInsert.est_delivery,
           history: JSON.stringify([
             {
@@ -444,7 +446,7 @@ export const PPICScheduleCreate = async (req, res) => {
           updated_by_id: userId,
           created_at: new Date(),
           updated_at: new Date(),
-          line_num: result[0].LINE_NUMBER,
+          line_num: resultLine[0].LINE_NUMBER,
           notes: JSON.stringify({
             init: {
               notes: rowToInsert.notes_ppic,
@@ -515,6 +517,7 @@ export const PPICScheduleCreate = async (req, res) => {
             sku_name,
             qty_delivery,
             est_delivery,
+            hutang_kirim,
             line_num,
             buyer_id: getBuyerId.id,
             notes: JSON.stringify({
@@ -541,10 +544,13 @@ export const PPICScheduleCreate = async (req, res) => {
           { dbTransaction }
         );
       } else {
+        const supplier = await db.SUPPLIERS.findOne({
+          where: { name: supplier_name },
+        });
         const checkIfDataExist = await db.OFFERS.findOne({
           where: {
             submission_date,
-            supplier_id: supplier_name, //dicari dulu id nya sesuai
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
             po_number,
             po_qty,
             po_outs,
@@ -595,15 +601,17 @@ export const PPICScheduleCreate = async (req, res) => {
             `Jumlah quantity pengiriman melebihi quantity outstanding, mohon cek kembali`
           );
         }
+
         await db.OFFERS.create(
           {
             submission_date,
-            supplier_id: supplier_name, //dicari dulu id nya sesuai
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
             po_number,
             po_qty,
             po_outs,
             sku_code,
             sku_name,
+            hutang_kirim,
             qty_delivery,
             est_delivery,
             history: JSON.stringify([
@@ -767,6 +775,7 @@ export const PPICScheduleEdit = async (req, res) => {
 
   try {
     const { schedules } = req.body.rq_body;
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -775,7 +784,7 @@ export const PPICScheduleEdit = async (req, res) => {
         "User belum terautentikasi, silahkan login kembali"
       );
     }
-    for (let key in schedules) {
+    if (schedules?.is_edit) {
       const {
         id,
         submission_date,
@@ -788,7 +797,10 @@ export const PPICScheduleEdit = async (req, res) => {
         qty_delivery,
         est_delivery,
         supplier,
-      } = schedules[key];
+        io_filter,
+        category_filter,
+      } = schedules;
+
       const checkIfDataExist = await db.OFFERS.findOne({
         where: {
           submission_date,
@@ -800,9 +812,11 @@ export const PPICScheduleEdit = async (req, res) => {
           sku_name,
           qty_delivery,
           est_delivery,
+          io_filter,
+          category_filter,
+          deleted_at: null,
         },
       });
-
       if (checkIfDataExist) {
         return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
       }
@@ -817,6 +831,8 @@ export const PPICScheduleEdit = async (req, res) => {
           sku_name,
           qty_delivery,
           est_delivery,
+          io_filter,
+          category_filter,
           updated_by_id: userId,
           updated_at: new Date(),
         },
@@ -825,6 +841,86 @@ export const PPICScheduleEdit = async (req, res) => {
         },
         { dbTransaction }
       );
+    } else {
+      for (let key in schedules) {
+        const {
+          id,
+          submission_date,
+          supplier_name,
+          po_number,
+          po_qty,
+          po_outs,
+          sku_code,
+          sku_name,
+          qty_delivery,
+          est_delivery,
+          io_filter,
+          category_filter,
+          supplier,
+        } = schedules[key];
+        const checkIfDataExist = await db.OFFERS.findOne({
+          where: {
+            submission_date,
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty,
+            po_outs,
+            sku_code,
+            sku_name,
+            qty_delivery,
+            est_delivery,
+            io_filter,
+            category_filter,
+            deleted_at: null,
+          },
+        });
+
+        if (checkIfDataExist) {
+          return errorResponse(
+            req,
+            res,
+            "Ada data duplikat, mohon cek kembali"
+          );
+        }
+
+        const getExistingHistory = await db.OFFERS.findOne({
+          where: { id },
+          attributes: ["history"],
+        });
+        const history = JSON.parse(getExistingHistory?.history);
+
+        await db.OFFERS.update(
+          {
+            submission_date,
+            supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty,
+            po_outs,
+            sku_code,
+            sku_name,
+            qty_delivery,
+            est_delivery,
+            io_filter,
+            category_filter,
+            history: JSON.stringify([
+              ...(history || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule Edited by ${userName}`,
+                created_at: new Date(),
+                created_by: userId,
+              },
+            ]),
+            updated_by_id: userId,
+            updated_at: new Date(),
+          },
+          {
+            where: { id },
+          },
+          { dbTransaction }
+        );
+      }
     }
 
     await dbTransaction.commit();
@@ -1060,7 +1156,7 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
           qty_delivery: checkAnotherSplit[key].dataValues.submitted_qty,
           est_delivery: checkAnotherSplit[key].dataValues.est_submitted_date,
           history: JSON.stringify([
-            ...(checkAnotherSplit[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherSplit[key].dataValues.history) || []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -1098,7 +1194,7 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -1129,7 +1225,7 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
       {
         flag_status: "E",
         history: JSON.stringify([
-          ...(checkTheCurrentID.history || []),
+          ...(JSON.parse(checkTheCurrentID.history) || []),
           {
             detail: `${moment().format(
               constant.FORMAT_DISPLAY_DATETIME
@@ -1169,7 +1265,7 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -1192,7 +1288,7 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
       where: {
         po_number: checkTheCurrentID.po_number,
         sku_code: checkTheCurrentID.sku_code,
-        [Op.not]: [{ is_edit: null }],
+        [Op.not]: [{ is_edit: false }],
         flag_status: "G",
       },
     });
@@ -1204,7 +1300,8 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
           est_delivery:
             checkAnotherEditedOffer[key].dataValues.est_submitted_date,
           history: JSON.stringify([
-            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherEditedOffer[key]?.dataValues.history) ||
+              []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -1242,7 +1339,7 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -1265,17 +1362,19 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
       where: {
         po_number: checkTheCurrentID.po_number,
         sku_code: checkTheCurrentID.sku_code,
-        [Op.not]: [{ is_edit: null }],
+        [Op.not]: [{ edit_from_id: null }],
         flag_status: "G",
       },
     });
+    console.log(checkAnotherEditedOffer, "checkAnotherEditedOffer");
     for (let key in checkAnotherEditedOffer) {
       //restore the original data
       await db.OFFERS.update(
         {
           flag_status: "E",
           history: JSON.stringify([
-            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherEditedOffer[key].dataValues.history) ||
+              []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -1292,11 +1391,14 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
           updated_at: new Date(),
         },
         {
-          where: { id: checkAnotherEditedOffer[key].dataValues.edit_from_id },
+          where: {
+            id: checkAnotherEditedOffer[key].dataValues.edit_from_id,
+            is_edit: true,
+          },
         },
         { dbTransaction }
       );
-      //delete the splitted data
+      //delete the Edited data
       await db.OFFERS.destroy(
         {
           where: { id: checkAnotherEditedOffer[key].dataValues.id },
@@ -1304,13 +1406,121 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
         { dbTransaction }
       );
     }
+    return successResponse(req, res, "Edit Request Rejected");
+  } catch (error) {
+    await dbTransaction.rollback();
+    return errorResponse(req, res, error.message);
+  }
+};
+export const PPICScheduleAcceptClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const { id } = req.body.rq_body;
+    const userName = getUserName(req);
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const checkTheCurrentID = await db.OFFERS.findOne({
+      where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
+    });
+
+    //update the status of editted data
+
+    await db.OFFERS.update(
+      {
+        flag_status: "X",
+        history: JSON.stringify([
+          ...(JSON.parse(checkTheCurrentID?.history) || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Close PO Schedule Request Accepted by ${userName} and Marked as Completed`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
+        updated_by_id: userId,
+        updated_at: new Date(),
+      },
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
+export const PPICScheduleRejectClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const { id } = req.body.rq_body;
+    const userName = getUserName(req);
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const checkTheCurrentID = await db.OFFERS.findOne({
+      where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
+    });
 
+    //restore the original data
+    await db.OFFERS.update(
+      {
+        flag_status: "E",
+        history: JSON.stringify([
+          ...(JSON.parse(checkTheCurrentID.history) || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Close PO Request Rejected by ${userName} and sent back to Supplier ${
+              checkTheCurrentID?.supplier?.name
+            }`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
+        updated_by_id: userId,
+        updated_at: new Date(),
+      },
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
+    return successResponse(req, res, "Close PO Request Rejected");
+  } catch (error) {
+    await dbTransaction.rollback();
+    return errorResponse(req, res, error.message);
+  }
+};
 export const PPICScheduleHistory = async (req, res) => {};
 
 export const PPICScheduleHistoryAll = async (req, res) => {};

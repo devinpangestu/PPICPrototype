@@ -136,33 +136,55 @@ const UserView = (props) => {
       key: "action",
       render: (_, user) => {
         if (!user.role.super_user) {
+          if (user.role.id === constant.ROLE_SUPPLIER) {
+            return (
+              <>
+                <Button
+                  className="mr-2"
+                  onClick={() => {
+                    handleOnResetPwd(user.user_id);
+                  }}
+                  danger
+                >
+                  {t("resetPassword")}
+                </Button>
+                {utils.renderWithPermission(
+                  userInfo.permissions,
+                  <Button
+                    type="danger"
+                    onClick={() => {
+                      handleOnDelete(user.user_id);
+                    }}
+                  >
+                    {t("delete")}
+                  </Button>,
+                  "user@delete",
+                )}
+              </>
+            );
+          }
           return (
             <>
-              {utils.renderWithPermission(
-                userInfo.permissions,
-                <>
-                  <Button
-                    type="primary"
-                    className="mr-2"
-                    onClick={() => {
-                      setModalEditShow(true);
-                      setModalEditId(user.user_id);
-                    }}
-                  >
-                    {t("edit")}
-                  </Button>
-                  <Button
-                    className="mr-2"
-                    onClick={() => {
-                      handleOnResetPwd(user.user_id);
-                    }}
-                    danger
-                  >
-                    {t("resetPassword")}
-                  </Button>
-                </>,
-                "user@edit",
-              )}
+              <Button
+                type="primary"
+                className="mr-2"
+                onClick={() => {
+                  setModalEditShow(true);
+                  setModalEditId(user.user_id);
+                }}
+              >
+                {t("edit")}
+              </Button>
+              <Button
+                className="mr-2"
+                onClick={() => {
+                  handleOnResetPwd(user.user_id);
+                }}
+                danger
+              >
+                {t("resetPassword")}
+              </Button>
+
               {utils.renderWithPermission(
                 userInfo.permissions,
                 <Button

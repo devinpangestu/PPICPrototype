@@ -87,16 +87,18 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
             continue;
           }
           tempMassCreateFileContent.push({
-            submission_date: sendToApiFormat(r[0]),
-            supplier_name: r[1],
-            po_number: r[2],
-            po_qty: utils.convertSeparateValueToNumericValue(r[3]),
-            po_outs: utils.convertSeparateValueToNumericValue(r[4]),
-            sku_code: r[5],
-            sku_name: r[6],
-            qty_delivery: utils.convertSeparateValueToNumericValue(r[7]),
-            est_delivery: sendToApiFormat(r[8]),
-            notes_ppic: r[9],
+            io_filter: r[0],
+            category_filter: r[1],
+            submission_date: sendToApiFormat(r[2]),
+            supplier_name: r[3],
+            po_number: r[4],
+            po_qty: utils.convertSeparateValueToNumericValue(r[5]),
+            po_outs: utils.convertSeparateValueToNumericValue(r[6]),
+            sku_code: r[7],
+            sku_name: r[8],
+            qty_delivery: utils.convertSeparateValueToNumericValue(r[9]),
+            est_delivery: sendToApiFormat(r[10]),
+            notes_ppic: r[11],
           });
         }
         setMassCreateFileContent(tempMassCreateFileContent);
@@ -142,6 +144,22 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
             }}
           />
         );
+      },
+    },
+    {
+      title: t("I/O Pabrik"),
+      dataIndex: "io_filter",
+      key: "io_filter",
+      render: (_, row) => {
+        return row.io_filter;
+      },
+    },
+    {
+      title: t("Category"),
+      dataIndex: "category_filter",
+      key: "category_filter",
+      render: (_, row) => {
+        return row.category_filter;
       },
     },
     {

@@ -6,7 +6,7 @@ import {
   uniqueId,
 } from "../helpers/index.js";
 import { Op, Sequelize, literal } from "sequelize";
-import { getUserID, getUserName } from "../utils/auth.js";
+import { getSupplierID, getUserID, getUserName } from "../utils/auth.js";
 import {
   parsingStringToDateEarly,
   parsingStringToDateLate,
@@ -15,11 +15,20 @@ import {
 import { getOutsQtyEachPOSKU } from "../utils/checker.js";
 import { filterDoubleFindCount } from "../utils/filter.js";
 import { constant } from "../constant/index.js";
+import moment from "moment";
+import { OpenQueryGetLineNum, OpenQueryPOOuts } from "../utils/openQuery.js";
 
 export const PurchasingScheduleSummary = async (req, res) => {
   try {
-    const { from_date, to_date, user_id, io_filter, supplier_id, status } =
-      req.query;
+    const {
+      from_date,
+      to_date,
+      user_id,
+      io_filter,
+      category_filter,
+      supplier_id,
+      status,
+    } = req.query;
     const userId = getUserID(req);
     if (!userId) {
       return errorResponse(
@@ -37,6 +46,9 @@ export const PurchasingScheduleSummary = async (req, res) => {
     }
     if (io_filter) {
       whereClause[Op.and].push({ io_filter });
+    }
+    if (category_filter) {
+      whereClause[Op.and].push({ category_filter });
     }
 
     if (supplier_id) {
@@ -85,6 +97,7 @@ export const PurchasingScheduleList = async (req, res) => {
     status,
     supplier_id,
     io_filter,
+    category_filter,
     user_id,
     searchPO,
   } = req.query;
@@ -146,11 +159,19 @@ export const PurchasingScheduleList = async (req, res) => {
     if (io_filter) {
       whereClause[Op.and].push({ io_filter });
     }
+    if (category_filter) {
+      whereClause[Op.and].push({ category_filter });
+    }
     const data = await db.OFFERS.findAndCountAll({
       include: [
         {
           model: db.USERS,
           as: "crtd_by",
+          attributes: ["id", "name"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
           attributes: ["id", "name"],
         },
         {
@@ -451,6 +472,7 @@ export const PurchasingScheduleEdit = async (req, res) => {
   try {
     //TODO MASS EDIT
     const { schedules } = req.body.rq_body;
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -491,19 +513,111 @@ export const PurchasingScheduleEdit = async (req, res) => {
       if (checkIfDataExist) {
         return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
       }
+
+      if (po_number === "") {
+        continue;
+      } else {
+        const [err, result] = await OpenQueryPOOuts(
+          po_number,
+          sku_code,
+          dbTransaction
+        );
+        if (!err) {
+          return errorResponse(req, res, "Gagal mencari data PO Outstanding");
+        }
+
+        if (qty_delivery > result[0].QUANTITY_OUTSTANDING) {
+          return errorResponse(
+            req,
+            res,
+            `Outstanding quantity tidak cocok dengan data outstanding quantity Oracle untuk ${po_number} dan barang ${sku_name}, apabila terjadi kesalahan silahkan retur ke PPIC untuk update Quantity Pengiriman`
+          );
+        }
+      }
+
+      const [err, resultLine] = await OpenQueryGetLineNum(po_number, sku_code);
+      if (!err) {
+        return errorResponse(req, res, "Gagal mendapatkan data line number");
+      }
+
+      let getSupplierId;
+      if (!supplier) {
+        //get supplier id
+        getSupplierId = await db.SUPPLIERS.findOne({
+          attributes: ["id"],
+          where: { name: resultLine[0].VENDOR_NAME },
+        });
+      } else {
+        //checking if supplier same with oracle
+        if (supplier.name !== resultLine[0].VENDOR_NAME) {
+          return errorResponse(
+            req,
+            res,
+            `Supplier tidak sesuai dengan data Oracle, apabila terjadi kesalahan penginputan supplier silahkan retur ke PPIC`
+          );
+        }
+      }
+
+      if (resultLine.length === 0) {
+        return errorResponse(
+          req,
+          res,
+          `Data PO ${po_number} dan barang ${sku_name} tidak ditemukan`
+        );
+      }
+
+      //get buyer id
+      const getBuyerId = await db.USERS.findOne({
+        attributes: ["id"],
+        raw: true,
+        where: { oracle_username: resultLine[0].BUYER_NAME },
+      });
+      if (!getBuyerId) {
+        return errorResponse(
+          req,
+          res,
+          `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
+        );
+      }
+
+      const getExistingHistory = await db.OFFERS.findOne({
+        where: { id },
+        attributes: ["history"],
+      });
+      const history = JSON.parse(getExistingHistory?.history);
+
       await db.OFFERS.update(
         {
           submission_date,
-          supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+          supplier_id: supplier ? supplier.ref_id : getSupplierId, //dicari dulu id nya sesuai
           po_number,
-          po_qty,
-          po_outs,
+          po_qty: resultLine[0].QUANTITY,
+          po_outs: resultLine[0].QTY_OUTS,
           sku_code,
           sku_name,
+          line_num: resultLine[0].LINE_NUMBER,
           qty_delivery,
           est_delivery,
           updated_by_id: userId,
           updated_at: new Date(),
+          buyer_id: getBuyerId.id,
+          history: JSON.stringify([
+            ...(history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Schedule Edited 
+              changes :
+              ${
+                supplier ? `Supplier : "" -> ${resultLine[0].VENDOR_NAME} ` : ""
+              }
+              - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
+              - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
+              By ${userName} `,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
         },
         {
           where: { id },
@@ -590,7 +704,7 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { rq_body } = req.body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -645,7 +759,7 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -677,7 +791,7 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
         {
           flag_status: "G",
           history: JSON.stringify([
-            ...(checkAnotherSplit[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherSplit[key].dataValues.history) || []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -705,7 +819,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -735,7 +849,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
       {
         flag_status: "E",
         history: JSON.stringify([
-          ...(checkTheCurrentID.history || []),
+          ...(JSON.parse(checkTheCurrentID.history) || []),
           {
             detail: `${moment().format(
               constant.FORMAT_DISPLAY_DATETIME
@@ -775,7 +889,7 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -798,7 +912,7 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
       where: {
         po_number: checkTheCurrentID.po_number,
         sku_code: checkTheCurrentID.sku_code,
-        [Op.not]: [{ is_edit: null }],
+        [Op.not]: [{ edit_from_id: null }],
         flag_status: "F",
       },
     });
@@ -808,7 +922,8 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
         {
           flag_status: "G",
           history: JSON.stringify([
-            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherEditedOffer[key]?.dataValues.history) ||
+              []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -821,7 +936,7 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
           updated_at: new Date(),
         },
         {
-          where: { id: checkAnotherEditedOffer[key].id },
+          where: { id: checkAnotherEditedOffer[key].id, is_edit: true },
         },
         { dbTransaction }
       );
@@ -837,7 +952,7 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
-
+    const userName = getUserName(req);
     const userId = getUserID(req);
     if (!userId) {
       return errorResponseUnauthorized(
@@ -860,7 +975,7 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
       where: {
         po_number: checkTheCurrentID.po_number,
         sku_code: checkTheCurrentID.sku_code,
-        [Op.not]: [{ is_edit: null }],
+        [Op.not]: [{ is_edit: false }],
         flag_status: "F",
       },
     });
@@ -871,7 +986,8 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
         {
           flag_status: "E",
           history: JSON.stringify([
-            ...(checkAnotherEditedOffer[key].dataValues.history || []),
+            ...(JSON.parse(checkAnotherEditedOffer[key]?.dataValues.history) ||
+              []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
@@ -900,6 +1016,115 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
       );
     }
     return successResponse(req, res, "Split Request Rejected");
+  } catch (error) {
+    await dbTransaction.rollback();
+    return errorResponse(req, res, error.message);
+  }
+};
+export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const { id } = req.body.rq_body;
+    const userName = getUserName(req);
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const checkTheCurrentID = await db.OFFERS.findOne({
+      where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
+    });
+
+    //update the status of editted data
+
+    await db.OFFERS.update(
+      {
+        flag_status: "G",
+        history: JSON.stringify([
+          ...(JSON.parse(checkTheCurrentID?.history) || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Close PO Schedule Request Accepted by ${userName} and forwarded to PPIC`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
+        updated_by_id: userId,
+        updated_at: new Date(),
+      },
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
+    return successResponse(req, res, "Split Request Rejected");
+  } catch (error) {
+    await dbTransaction.rollback();
+    return errorResponse(req, res, error.message);
+  }
+};
+export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const { id } = req.body.rq_body;
+    const userName = getUserName(req);
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const checkTheCurrentID = await db.OFFERS.findOne({
+      where: { id },
+      include: [
+        {
+          model: db.SUPPLIERS,
+          as: "supplier",
+          attributes: ["id", "ref_id", "name"],
+        },
+      ],
+    });
+
+    //restore the original data
+    await db.OFFERS.update(
+      {
+        flag_status: "E",
+        history: JSON.stringify([
+          ...(JSON.parse(checkTheCurrentID.history) || []),
+          {
+            detail: `${moment().format(
+              constant.FORMAT_DISPLAY_DATETIME
+            )} Close PO Request Rejected by ${userName} and sent back to Supplier ${
+              checkTheCurrentID?.supplier?.name
+            }`,
+            created_at: new Date(),
+            created_by: userName,
+          },
+        ]),
+        updated_by_id: userId,
+        updated_at: new Date(),
+      },
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
+    return successResponse(req, res, "Close PO Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
     return errorResponse(req, res, error.message);

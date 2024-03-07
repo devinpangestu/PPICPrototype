@@ -60,7 +60,7 @@ export const dailyJobSupplierValidityCheck = () => {
 
 export const dailyJobSupplierRefreshSupplier = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 5 23 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -80,6 +80,108 @@ export const dailyJobSupplierRefreshSupplier = () => {
         console.log(
           `[CRON DAILY REFRESH SUPPLIER DATA] ${dateNow} ${timeNow} SUCCESSFULY REFRESH SUPPLIER DATA.`
         );
+        await transaction.commit();
+      } catch (err) {
+        console.log(err);
+      }
+    },
+    null,
+    true
+  );
+};
+export const dailyJobSupplierRefreshSupplierUser = () => {
+  new CronJob(
+    "0 0 23 * * *",
+    //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
+    async () => {
+      const tNow = new Date();
+      const dateNow = tNow.toISOString().split("T")[0];
+      const timeNow = tNow.toISOString().split("T")[1].split(".")[0];
+      console.log(
+        `[CRON DAILY REFRESH SUPPLIER DATA] ${dateNow} ${timeNow} START`
+      );
+      const transaction = await db.sequelize.transaction();
+      try {
+        // CHECK FOR USER THAT NOT LOGIN UNTIL MIDNIGHT
+        const allUser = await db.USERS.findAll({
+          where: {
+            deleted_at: null,
+            password_changed_at: null,
+            role_id: 4,
+          },
+          raw: true,
+        });
+        if (allUser.length === 0) {
+          console.log(
+            `[CRON DAILY REFRESH SUPPLIER DATA] ${dateNow} ${timeNow} No suppliers to refresh for today.`
+          );
+        }
+        for (let key in allUser) {
+          await db.USERS.destroy(
+            {
+              where: {
+                id: allUser[key].id,
+              },
+            },
+            { transaction }
+          );
+          //update supplier status
+          await db.SUPPLIERS.update(
+            { user_status: false },
+            {
+              where: {
+                ref_id: allUser[key].supplier_id,
+                email: allUser[key].email,
+              },
+            },
+            { transaction }
+          );
+        }
+
+        //CHECK FOR USER THAT ALREADY CHANGE PASSWORD TO GET VERIFIED STATUS
+        const allUserChangedPassword = await db.USERS.findAll({
+          where: {
+            deleted_at: null,
+            password_changed_at: { [Op.ne]: null },
+            role_id: 4,
+          },
+          include: [
+            {
+              model: db.SUPPLIERS,
+              as: "from_supplier",
+              where: {
+                user_status: true,
+                verified_status: false,
+              },
+            },
+          ],
+          raw: true,
+        });
+
+        if (allUserChangedPassword.length === 0) {
+          console.log(
+            `[CRON DAILY REFRESH SUPPLIER DATA] ${dateNow} ${timeNow} No suppliers Account to refresh for today.`
+          );
+        }
+
+        for (let key in allUserChangedPassword) {
+          await db.SUPPLIERS.update(
+            { verified_status: true },
+            {
+              where: {
+                user_status: true,
+                ref_id: allUserChangedPassword[key].supplier_id,
+                email: allUserChangedPassword[key].email,
+              },
+            },
+            { transaction }
+          );
+        }
+
+        console.log(
+          `[CRON DAILY REFRESH SUPPLIER DATA] ${dateNow} ${timeNow} SUCCESSFULY CLEAN USER DATA.`
+        );
+
         await transaction.commit();
       } catch (err) {
         console.log(err);

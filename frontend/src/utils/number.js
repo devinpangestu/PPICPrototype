@@ -6,3 +6,7 @@ export const roundClosestTen = (num) => {
   }
   return num.div(new Decimal(10)).round().mul(new Decimal(10)).toNumber();
 };
+
+export const viewTwoNumberBehindComma = (num) => {
+  return Number.isInteger(num) ? num : num.toFixed(2);
+};

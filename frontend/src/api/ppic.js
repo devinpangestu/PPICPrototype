@@ -126,6 +126,20 @@ const ppic = {
       data: { id },
     });
   },
+  acceptClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/ppic/accept-close-po`,
+      data: { id },
+    });
+  },
+  rejectClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/ppic/reject-close-po`,
+      data: { id },
+    });
+  },
   histories: (search, page_size, page_number) => {
     let params = {};
     if (search) {

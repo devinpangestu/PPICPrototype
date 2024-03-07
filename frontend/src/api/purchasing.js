@@ -109,6 +109,20 @@ const purchasing = {
       data: { id },
     });
   },
+  acceptClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/purchasing/accept-close-po`,
+      data: { id },
+    });
+  },
+  rejectClosePO: (id) => {
+    return axios({
+      method: "put",
+      url: `/purchasing/reject-close-po`,
+      data: { id },
+    });
+  },
   histories: (search, page_size, page_number) => {
     let params = {};
     if (search) {

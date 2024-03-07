@@ -53,7 +53,6 @@ export default (sequelize, DataTypes) => {
       },
 
       supplier_id: {
-        allowNull: false,
         type: DataTypes.NUMERIC,
         references: {
           model: "SUPPLIERS",
@@ -81,12 +80,12 @@ export default (sequelize, DataTypes) => {
       },
       po_qty: {
         defaultValue: null,
-        type: DataTypes.NUMERIC,
+        type: DataTypes.FLOAT,
       },
       po_outs: {
         // allowNull: false,
         defaultValue: null,
-        type: DataTypes.NUMERIC,
+        type: DataTypes.FLOAT,
       },
       sku_code: {
         allowNull: false,
@@ -101,21 +100,24 @@ export default (sequelize, DataTypes) => {
       qty_delivery: {
         allowNull: false,
         defaultValue: null,
-        type: DataTypes.NUMERIC,
+        type: DataTypes.FLOAT,
       },
       est_delivery: {
         defaultValue: DataTypes.NOW,
         type: DataTypes.DATE,
       },
-
-      revised_qty: { defaultValue: null, type: DataTypes.NUMERIC },
+      hutang_kirim: {
+        defaultValue: false,
+        type: DataTypes.BOOLEAN,
+      },
+      revised_qty: { defaultValue: null, type: DataTypes.FLOAT },
       est_revised_date: {
         defaultValue: null,
         type: DataTypes.DATE,
       },
       submitted_qty: {
         defaultValue: null,
-        type: DataTypes.NUMERIC,
+        type: DataTypes.FLOAT,
       },
       est_submitted_date: { defaultValue: null, type: DataTypes.DATE },
       gr_qty: {

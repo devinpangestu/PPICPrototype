@@ -26,6 +26,9 @@ const ModalConfirmCreate = (props) => {
       centered
     >
       <Form labelCol={{ span: 8 }} size="small">
+        <Form.Item label={t("Hutang Kirim")} className="mb-0">
+          <Input value={values.hutang_kirim ? "✅" : "❌"} bordered={false} />
+        </Form.Item>
         <Form.Item label={t("Submission Date")} className="mb-0">
           {values.submission_date && (
             <Input

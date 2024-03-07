@@ -35,6 +35,7 @@ import {
   dailyJobSupplierRefreshSupplier,
   dailyJobSupplierValidityCheck,
   dailyJobUpdatePOOutstanding,
+  dailyJobSupplierRefreshSupplierUser,
 } from "./middlewares/cronjobs.js";
 
 const app = express();
@@ -150,6 +151,7 @@ app.use((req, res, next) => {
 
 dailyJobSupplierValidityCheck();
 dailyJobSupplierRefreshSupplier();
+dailyJobSupplierRefreshSupplierUser();
 dailyJobScheduleCheckTodayDeliveryDateAndOutstanding();
 dailyJobUpdatePOOutstanding();
 export default app;

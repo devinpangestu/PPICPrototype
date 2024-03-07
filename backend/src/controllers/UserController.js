@@ -11,6 +11,14 @@ export const UserList = async (req, res) => {
   const offset = (page_number - 1) * page_size;
   const ppic_ids = req.query.ppic_ids || null;
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
     const roleWhereClause = {
       [Op.or]: [],
     };
@@ -56,19 +64,27 @@ export const UserList = async (req, res) => {
 };
 
 export const UserCreate = async (req, res) => {
-  const { employee_id, role_id, name } = req.body.rq_body;
-  const userId = getUserID(req);
+  const { user_id, role_id, name } = req.body.rq_body;
+
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
     // check if all rq_body is provided
-    if (!employee_id || !role_id || !name) {
+    if (!user_id || !role_id || !name) {
       return errorResponse(req, res, "Please provide all required fields");
     }
-    // check if employee_id is same as before or unique than others then pass but if same as other row then return error
+    // check if user_id is same as before or unique than others then pass but if same as other row then return error
     const user = await db.USERS.findOne({
-      where: { employee_id },
+      where: { user_id },
     });
     if (user) {
-      return errorResponse(req, res, "Employee ID already exist");
+      return errorResponse(req, res, "User ID already exist");
     }
     // check if requested role_id is valid or exclude super_user
     const role = await db.ROLES.findOne({
@@ -78,11 +94,11 @@ export const UserCreate = async (req, res) => {
       return errorResponse(req, res, "Role not found");
     }
 
-    //create password base on employee_id and decode it
-    const passwordToHash = await bcrypt.hash(employee_id, 4);
+    //create password base on user_id and decode it
+    const passwordToHash = await bcrypt.hash(user_id, 4);
 
     const payload = {
-      employee_id,
+      user_id,
       role_id,
       name,
       password: passwordToHash,
@@ -91,7 +107,7 @@ export const UserCreate = async (req, res) => {
       updated_at: new Date(),
       onesignal_player_id: "[]",
     };
-    const createUser = await db.USERS.create(payload);
+    await db.USERS.create(payload);
 
     return successResponse(req, res, "New User Created Successfully");
   } catch (error) {
@@ -102,6 +118,14 @@ export const UserCreate = async (req, res) => {
 export const UserGet = async (req, res) => {
   const { user_id } = req.params;
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
     const data = await db.USERS.findOne({
       include: [
         {
@@ -131,29 +155,37 @@ export const UserGet = async (req, res) => {
 };
 
 export const UserEdit = async (req, res) => {
-  const { employee_id, role_id, name } = req.body.rq_body;
-  const prev_employee_id = req.params.employee_id;
+  const { user_id, role_id, name } = req.body.rq_body;
+  const prev_user_id = req.params.user_id;
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
     // check if all rq_body is provided
-    if (!employee_id || !role_id || !name) {
+    if (!user_id || !role_id || !name) {
       return errorResponse(req, res, "Please provide all required fields");
     }
-    //get id from prev_employee_id
+    //get id from prev_user_id
     const userToChange = await db.USERS.findOne({
       attributes: ["id"],
-      where: { employee_id: prev_employee_id },
+      where: { user_id: prev_user_id },
     });
     if (!userToChange) {
       return errorResponse(req, res, "User not found");
     }
 
-    // check if employee_id is same as before or unique than others then pass but if same as other row then return error
+    // check if user_id is same as before or unique than others then pass but if same as other row then return error
 
     const user = await db.USERS.findOne({
-      where: { employee_id },
+      where: { user_id },
     });
     if (user && user.id !== userToChange.id) {
-      return errorResponse(req, res, "Employee ID already exist");
+      return errorResponse(req, res, "User ID already exist");
     }
 
     // check if requested role_id is valid or exclude super_user
@@ -165,7 +197,7 @@ export const UserEdit = async (req, res) => {
     }
 
     const payload = {
-      employee_id,
+      user_id,
       role_id,
       name,
       updated_at: new Date(),
@@ -181,8 +213,15 @@ export const UserEdit = async (req, res) => {
 };
 
 export const UserDelete = async (req, res) => {
-  const userId = getUserID(req);
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
     const { user_id } = req.params;
     const user = await db.USERS.findOne({
       where: { user_id },
@@ -199,24 +238,34 @@ export const UserDelete = async (req, res) => {
 };
 
 export const UserResetPwd = async (req, res) => {
-  const { employee_id } = req.params;
+  const { user_id } = req.params;
 
   try {
+    const userId = getUserID(req);
+    if (!userId) {
+      return errorResponse(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+
     const user = await db.USERS.findOne({
-      where: { employee_id },
+      where: { user_id },
     });
     if (!user) {
       return errorResponse(req, res, "User not found");
     }
 
     //hash new password
-    const newPasswordToHash = await bcrypt.hash(employee_id, 4);
+    const newPasswordToHash = await bcrypt.hash(user_id, 4);
     const payload = {
       password: newPasswordToHash,
       updated_at: new Date(),
+      password_changed_at: null,
     };
     await db.USERS.update(payload, {
-      where: { employee_id },
+      where: { user_id },
     });
     return successResponse(req, res, "Reset Password Success");
   } catch (error) {

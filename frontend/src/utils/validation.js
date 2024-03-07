@@ -2,6 +2,7 @@ import constant from "constant";
 import swalCommon from "./swal";
 import moment from "moment";
 
+
 export const isPriceMonthsValid = (prices = []) => {
   let lastMonthIdx = -1;
   for (const p of prices) {

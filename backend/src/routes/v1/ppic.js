@@ -59,6 +59,16 @@ router.put(
   verifyTokenAndRole("ppic@edit"),
   PPICController.PPICScheduleRejectEditSupplier
 );
+router.put(
+  "/accept-close-po",
+  verifyTokenAndRole("ppic@edit"),
+  PPICController.PPICScheduleAcceptClosePOSupplier
+);
+router.put(
+  "/reject-close-po",
+  verifyTokenAndRole("ppic@edit"),
+  PPICController.PPICScheduleRejectClosePOSupplier
+);
 router.get(
   "/po-details",
   verifyTokenAndRole("ppic@view"),

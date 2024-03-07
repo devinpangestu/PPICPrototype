@@ -65,6 +65,7 @@ const setUpExpress = () => {
     console.error("app error", appErr.stack);
     console.error("on url", appCtx.req.url);
     console.error("with headers", appCtx.req.headers);
+    console.log("App Error::", appErr);
   });
 
   // Handle unhandled promise rejections
@@ -73,6 +74,9 @@ const setUpExpress = () => {
     console.log(err.name, err.message);
     // Close server & exit process
     server.close(() => {
+      console.log(
+        "Server closed. Got Exit Code 'unhandledRejection'. Restarting..."
+      );
       process.exit(1);
     });
   });
@@ -82,6 +86,10 @@ const setUpExpress = () => {
     server.close(() => {
       console.log("💥 Process terminated!");
     });
+    server.close(() => {
+      console.log("Server closed. Got Exit Code 'SIGTERM'. Restarting...");
+      process.exit(1);
+    });
   });
 
   process.on("uncaughtException", (uncaughtExc) => {
@@ -90,10 +98,10 @@ const setUpExpress = () => {
     console.log("uncaughtException Err::", uncaughtExc);
     console.log("uncaughtException Stack::", JSON.stringify(uncaughtExc.stack));
     server.close(() => {
-      console.log("Server closed. Restarting...");
-      server.listen(port, () => {
-        console.log(`Server restarted on port ${port}`);
-      });
+      console.log(
+        "Server closed. Got Exit Code 'uncaughtException'. Restarting..."
+      );
+      process.exit(1);
     });
   });
 };

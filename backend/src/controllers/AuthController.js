@@ -120,8 +120,17 @@ export const Login = async (req, res) => {
       issued_at: new Date(),
       expired_at: expirationTime,
     };
+    const tokenObjSession = {
+      id: uniqueId(),
+      type: constant.TOKEN_TYPE_SESSION,
+      token,
+      user_id: Number(user.id),
+      issued_at: new Date(),
+      expired_at: expirationTime,
+    };
     try {
       await db.TOKEN.create(tokenObj);
+      await db.TOKEN.create(tokenObjSession);
       console.log("Token created successfully.");
     } catch (error) {
       console.error("Error creating token:", error);
@@ -146,13 +155,35 @@ export const LoginRfToken = async (req, res) => {};
 
 //LOGOUT
 export const Logout = async (req, res) => {
-  req.session.destroy((error) => {
-    if (error) {
-      next(error);
-    } else {
-      res.sendStatus(200);
-    }
-  });
+  const { access_token, user_define } = req.body.rq_body;
+
+  if (user_define) {
+    await db.TOKEN.destroy({
+      where: {
+        token: access_token,
+        [Op.or]: [
+          { type: constant.TOKEN_TYPE_ACCESS },
+          { type: constant.TOKEN_TYPE_SESSION },
+        ],
+      },
+    });
+
+    req.session.destroy((error) => {
+      if (error) {
+        next(error);
+      } else {
+        res.sendStatus(200);
+      }
+    });
+  } else {
+    req.session.destroy((error) => {
+      if (error) {
+        next(error);
+      } else {
+        res.sendStatus(200);
+      }
+    });
+  }
 };
 
 export const ChangePwd = async (req, res) => {
@@ -257,6 +288,53 @@ export const ChangePwd = async (req, res) => {
   }
 };
 
+export const TokenCheck = async (req, res) => {
+  const { access_token } = req.body.rq_body;
+  if (!access_token) {
+    return errorResponse(req, res, "Credential is missing");
+  }
+
+  try {
+    const token = await db.TOKEN.findOne({
+      where: {
+        token: access_token,
+        type: constant.TOKEN_TYPE_ACCESS,
+        expired_at: {
+          [Op.gte]: new Date(),
+        },
+      },
+    });
+
+    if (!token) {
+      const tokenSession = await db.TOKEN.findOne({
+        where: {
+          token: access_token,
+          type: constant.TOKEN_TYPE_SESSION,
+          expired_at: {
+            [Op.gte]: new Date(),
+          },
+        },
+        raw: true,
+      });
+      if (!tokenSession) {
+        return errorResponse(req, res, "Invalid Credential");
+      }
+      
+      await db.TOKEN.create({
+        token: access_token,
+        type: constant.TOKEN_TYPE_ACCESS,
+        user_id: tokenSession.user_id,
+        issued_at: new Date(),
+        expired_at: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
+        id: uniqueId(),
+      });
+    }
+
+    return successResponse(req, res, { valid: true });
+  } catch (error) {
+    return errorResponse(req, res, error.message);
+  }
+};
 //NOT USED
 async function generateAndSetNewRefreshToken(userId) {
   try {

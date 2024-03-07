@@ -35,6 +35,8 @@ import ModalPriceData from "components/ModalPriceData";
 import ModalExport from "components/ModalExport";
 import { SectionHeading } from "components/Section";
 import ModalEdit from "./modal/ModalEdit";
+import { viewTwoNumberBehindComma } from "utils/number";
+import { authorizationCheck, isAccessTokenValid, isSessionTabValid, passwordChangedCheck } from "utils/auth";
 const { Panel } = Collapse;
 
 const Transaction = (props) => {
@@ -76,11 +78,14 @@ const Transaction = (props) => {
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
       const historyDetail = JSON.parse(record.history);
-      return historyDetail.map((history, index) => {
+      return historyDetail.reverse().map((history, index) => {
         return (
-          <p key={index} style={{ margin: 0, fontSize: "1rem" }}>
-            {`${history?.detail}`}
-          </p>
+          <>
+            <p key={index} style={{ margin: 0, fontSize: "1rem" }}>
+              {`${history?.detail}`}
+            </p>
+            <br />
+          </>
         );
       });
     },
@@ -112,6 +117,10 @@ const Transaction = (props) => {
 
   useEffect(() => {
     const intervalId = handler.setupAuthorizationCheck(userInfo);
+    authorizationCheck(userInfo);
+    passwordChangedCheck(userInfo);
+    isAccessTokenValid(localStorage.getItem(constant.ACCESS_TOKEN));
+    isSessionTabValid(sessionStorage.getItem(constant.ACCESS_TOKEN));
     // Clean up the interval when the component unmounts
     return () => clearInterval(intervalId);
   }, [userInfo]);
@@ -318,7 +327,12 @@ const Transaction = (props) => {
                     ${item.label.complete_schedule} out of ${item.label.total_schedule} Schedule Completed`}
                     style={{ fontSize: "20px", whiteSpace: "pre-line" }}
                     additionalAction={(() => {
-                      return <Progress type="circle" percent={averagePercentage} />;
+                      return (
+                        <Progress
+                          type="circle"
+                          percent={viewTwoNumberBehindComma(averagePercentage)}
+                        />
+                      );
                     })()}
                     actionStyle={{ fontSize: "20px", textAlign: "right" }}
                   />
@@ -448,61 +462,86 @@ const Transaction = (props) => {
         width: 150,
         render: (_, row) => {
           let btnEdit;
-          let tagComplete;
+          let tag;
 
           const valuesMap = statusPercentageValue[row.flag_status];
-          if (row.deleted_at !== null) return renderStatusTag("error", "Deleted");
+          if (row.deleted_at !== null) {
+            tag = renderStatusTag("error", "Deleted");
+          }
           if (
             row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
             row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
           ) {
-            return renderStatusTag("error", "at PPIC");
+            tag = renderStatusTag("error", "at PPIC");
           }
           if (
             row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
             row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
           ) {
-            return renderStatusTag("error", "at Procurement");
+            tag = renderStatusTag("error", "at Procurement");
           }
           if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
-            return renderStatusTag("error", `at Supplier ${row.supplier.name}`);
+            tag = renderStatusTag("error", `at Supplier ${row.supplier.name}`);
           }
           if (
             row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
             row.split_from_id !== null
           ) {
-            return renderStatusTag("warning", "Split Request (Supplier to Procurement)");
+            tag = renderStatusTag("warning", "Split Request (Supplier to Procurement)");
           }
           if (
             row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
             row.edit_from_id !== null
           ) {
-            return renderStatusTag("warning", "Edit Request (Supplier to Procurement)");
+            tag = renderStatusTag("warning", "Edit Request (Supplier to Procurement)");
           }
-
+          if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.split_from_id !== null) {
+            tag = renderStatusTag("warning", "Split Request (Procurement to PPIC)");
+          }
+          if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.edit_from_id !== null) {
+            tag = renderStatusTag("warning", "Edit Request (Procurement to PPIC)");
+          }
           if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
-            btnEdit = (
-              <Button
-                className="ma-0"
-                size="small"
-                type="primary"
-                onClick={() => {
-                  setModalEditData(row.id);
-                  setModalEditShow(true);
+            tag = renderStatusTag("success", "Complete");
+          }
+          btnEdit = (
+            <Button
+              className="ma-0"
+              size="small"
+              type="primary"
+              onClick={() => {
+                setModalEditData(row.id);
+                setModalEditShow(true);
+              }}
+              title="Available after the schedule is reach supplier"
+              disabled={
+                row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+                row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+                row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+                row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+              }
+            >
+              {t("Force Edit")}
+            </Button>
+          );
+
+          return (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                {btnEdit}
+              </div>
+              <div
+                style={{
+                  marginTop: "8px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
                 }}
               >
-                {t("Edit")}
-              </Button>
-            );
-            tagComplete = renderStatusTag("success", "Complete");
-            return (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                {btnEdit}
-                {tagComplete}
+                {tag}
               </div>
-            );
-          }
-          return;
+            </>
+          );
         },
       },
     ];

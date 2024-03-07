@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 export const TOKEN_ISSUER = "bkp-approval-api";
 export const TOKEN_TYPE_ACCESS = "access";
+export const TOKEN_TYPE_SESSION = "session";
 export const TOKEN_TYPE_REFRESH = "refresh";
 export const SECRET_REFRESH = process.env.SECRET_REFRESH;
 export const SECRET_ACCESS = process.env.SECRET_ACCESS;

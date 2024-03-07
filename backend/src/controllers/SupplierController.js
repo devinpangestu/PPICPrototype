@@ -234,97 +234,102 @@ export const SupplierScheduleEdit = async (req, res) => {
     }
 
     for (let key in schedules) {
+      console.log(237);
       if (schedules[key].flag_status == "E") {
         //original schedule
-
-        const getExistingNotes = JSON.parse(
-          ori_schedules.find((x) => x.id == schedules[key].id).notes
+        console.log(239);
+        let getExistingNotes = JSON.parse(
+          ori_schedules.find((x) => x.id == schedules[key].id)?.notes
         );
-        console.log(242);
-        const getExistingHistory = JSON.parse(
-          ori_schedules.find((x) => x.id == schedules[key].id).history
+        console.log(243);
+        let getExistingHistory = JSON.parse(
+          ori_schedules.find((x) => x.id == schedules[key].id)?.history
         );
         console.log(246);
-        await Promise.all([
-          await db.OFFERS.update(
-            {
-              is_edit: true,
-              history: JSON.stringify([
-                ...(getExistingHistory || []),
-                {
-                  detail: `${moment().format(
-                    constant.FORMAT_DISPLAY_DATETIME
-                  )} Schedule edited by ${userName} from ${
-                    ori_schedules.find((x) => x.id == schedules[key].id)
-                      .est_delivery
-                  } to ${schedules[key].est_delivery} with qty ${
-                    schedules[key].qty_delivery
-                  }`,
-                  created_at: new Date(),
-                  created_by: userName,
-                },
-              ]),
-              updated_by_id: userId,
-              updated_at: new Date(),
-            },
-            {
-              where: { id: schedules[key].id },
-            },
-            { dbTransaction }
-          ),
+        console.log(getExistingNotes);
+        await db.OFFERS.update(
+          {
+            is_edit: true,
+            history: JSON.stringify([
+              ...(getExistingHistory || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule edited by ${userName} from ${moment(
+                  ori_schedules.find((x) => x.id == schedules[key].id)
+                    .est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} to ${
+                  schedules[key].est_delivery
+                } with qty ${moment(schedules[key].qty_delivery).format(
+                  constant.FORMAT_DISPLAY_DATE
+                )}`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            updated_by_id: userId,
+            updated_at: new Date(),
+          },
+          {
+            where: { id: schedules[key].id },
+          },
+          { dbTransaction }
+        );
+        console.log(275);
 
-          await db.OFFERS.create(
-            {
-              po_number: schedules[key].po_number,
-              supplier_id: parseInt(schedules[key].supplier_id),
-              submission_date: new Date(schedules[key].submission_date),
-              po_qty: parseInt(schedules[key].po_qty),
-              po_outs: parseInt(schedules[key].po_outs),
-              sku_code: schedules[key].sku_code,
-              sku_name: schedules[key].sku_name,
-              notes: JSON.stringify({
-                ...getExistingNotes,
-                edit_req: {
-                  notes: schedules[key].notes,
-                  created_by: userName,
-                  created_at: new Date(),
-                },
-              }),
-              history: JSON.stringify([
-                ...(getExistingHistory || []),
-                {
-                  detail: `${moment().format(
-                    constant.FORMAT_DISPLAY_DATETIME
-                  )} Request edit schedule by ${userName} from ${
-                    ori_schedules.find((x) => x.id == schedules[key].id)
-                      .est_delivery
-                  } to ${schedules[key].est_delivery} with qty ${
-                    schedules[key].qty_delivery
-                  }`,
-                  created_at: new Date(),
-                  created_by: userName,
-                },
-              ]),
-              est_delivery: new Date(
-                ori_schedules.find(
-                  (x) => x.id == schedules[key].id
-                )?.est_delivery
-              ),
-              qty_delivery: ori_schedules.find((x) => x.id == schedules[key].id)
-                ?.qty_delivery,
-              est_submitted_date: new Date(schedules[key].est_delivery),
-              submitted_qty: schedules[key].qty_delivery,
-              flag_status: "F",
-              is_edit: false,
-              edit_from_id: schedules[key].id,
-              created_by_id: schedules[key].created_by_id,
-              created_at: new Date(),
-              updated_by_id: userId,
-              updated_at: new Date(),
-            },
-            { dbTransaction }
-          ),
-        ]);
+        await db.OFFERS.create(
+          {
+            po_number: schedules[key].po_number,
+            supplier_id: parseInt(schedules[key].supplier_id),
+            submission_date: new Date(schedules[key].submission_date),
+            po_qty: parseInt(schedules[key].po_qty),
+            po_outs: parseInt(schedules[key].po_outs),
+            sku_code: schedules[key].sku_code,
+            sku_name: schedules[key].sku_name,
+            notes: JSON.stringify({
+              ...(getExistingNotes || []),
+              edit_req: {
+                notes: schedules[key].notes,
+                created_by: userName,
+                created_at: new Date(),
+              },
+            }),
+            history: JSON.stringify([
+              ...(getExistingHistory || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Request edit schedule by ${userName} from ${moment(
+                  ori_schedules.find((x) => x.id == schedules[key].id)
+                    .est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} to ${moment(
+                  schedules[key].est_delivery
+                ).format(constant.FORMAT_DISPLAY_DATE)} with qty ${
+                  schedules[key].qty_delivery
+                }`,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            est_delivery: new Date(
+              ori_schedules.find((x) => x.id == schedules[key].id)?.est_delivery
+            ),
+            qty_delivery: ori_schedules.find((x) => x.id == schedules[key].id)
+              ?.qty_delivery,
+            est_submitted_date: new Date(schedules[key].est_delivery),
+            submitted_qty: schedules[key].qty_delivery,
+            flag_status: "F",
+            is_edit: false,
+            edit_from_id: schedules[key].id,
+            created_by_id: schedules[key].created_by_id,
+            created_at: new Date(),
+            updated_by_id: userId,
+            updated_at: new Date(),
+            buyer_id: schedules[key].buyer_id,
+          },
+          { dbTransaction }
+        );
+        console.log(345);
       }
     }
 
@@ -378,6 +383,16 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
         res,
         "Splitting tidak dapat dilakukan karena hanya ada 1 jadwal pengiriman, gunakan tombol edit"
       );
+    }
+
+    for (let key in schedules) {
+      if (schedules[key].qty_delivery == 0) {
+        return errorResponse(
+          req,
+          res,
+          "Jumlah quantity yang di split tidak boleh 0, silahkan cek kembali"
+        );
+      }
     }
 
     const getExistingNotes = JSON.parse(offerToSplitted.notes);
@@ -480,6 +495,67 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
     await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule splitted");
+  } catch (error) {
+    await dbTransaction.rollback();
+
+    return errorResponse(req, res, error.message);
+  }
+};
+
+export const SupplierScheduleClosePOSupplier = async (req, res) => {
+  const dbTransaction = await db.sequelize.transaction();
+  try {
+    const id = req.params.id;
+
+    const userId = getUserID(req);
+    const userName = getUserName(req);
+    if (!userId) {
+      return errorResponseUnauthorized(
+        req,
+        res,
+        "User belum terautentikasi, silahkan login kembali"
+      );
+    }
+    const offerToSplitted = await db.OFFERS.findOne({
+      where: { id, deleted_at: null },
+      attributes: {
+        exclude: ["id"],
+      },
+    });
+
+    const getExistingNotes = JSON.parse(offerToSplitted.notes);
+    const getExistingHistory = JSON.parse(offerToSplitted.history);
+
+    //update original schedule
+    const payloadForOriginalSchedule = {
+      ...offerToSplitted.dataValues,
+      history: JSON.stringify([
+        ...(getExistingHistory || []),
+        {
+          detail: `${moment().format(
+            constant.FORMAT_DISPLAY_DATETIME
+          )} Request Close PO schedule by ${userName} for ${
+            offerToSplitted.po_number
+          } item ${offerToSplitted.sku_name} and outstanding qty ${
+            offerToSplitted.po_outs
+          }`,
+          created_at: new Date(),
+          created_by: userName,
+        },
+      ]),
+      flag_status: "F",
+    };
+    await db.OFFERS.update(
+      payloadForOriginalSchedule,
+      {
+        where: { id },
+      },
+      { dbTransaction }
+    );
+
+    await dbTransaction.commit();
+
+    return successResponse(req, res, "Schedule go to close PO");
   } catch (error) {
     await dbTransaction.rollback();
 

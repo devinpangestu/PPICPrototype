@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0",
   "VITE_WEB_BASE_URL_PROD": "http://192.168.110.83:8443",
   "VITE_API_BASE_URL_PROD": "https://pcpobedev.bkpprima.co.id:9090/v1/",
   "VITE_VERSION": "v1.0.0",

@@ -21,6 +21,7 @@ export const en = {
     not: "Not",
     new: "New",
     bulking: "Bulking",
+    mass: "Mass",
     fromDate: "From date",
     toDate: "To date",
     min: "Min",
@@ -52,7 +53,7 @@ export const en = {
     name: "Name",
     role: "Role",
     action: "Action",
-    oracleUsername:"Oracle Username",
+    oracleUsername: "Oracle Username",
 
     // supplier
     supplierData: "Supplier Data",
@@ -81,6 +82,7 @@ export const en = {
     dealer: "Dealer",
     dealerNotes: "Dealer notes",
     autoFill: "Auto Fill",
+    hutangKirim: "Hutang Kirim",
     isRecommended: "Recommended",
     analyst: "Analyst",
     analystNotes: "Analyst notes",

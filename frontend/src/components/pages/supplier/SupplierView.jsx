@@ -27,7 +27,7 @@ import constant from "constant";
 import ModalSplitSchedule from "./modal/ModalSplitSchedule";
 import handler from "handler";
 import ModalEditAndSend from "./modal/ModalEditAndSend";
-import { authorizationCheck, isMobile, passwordChangedCheck } from "utils/auth";
+import { authorizationCheck, isAccessTokenValid, isMobile, isSessionTabValid, passwordChangedCheck } from "utils/auth";
 import { usePageStore } from "state/pageState";
 
 const SupplierView = (props) => {
@@ -53,9 +53,17 @@ const SupplierView = (props) => {
   const [toggleCheckboxTitle, setToggleCheckboxTitle] = useState(true);
 
   useEffect(() => {
-    loadOffers();
-    authorizationCheck(userInfo);
-    passwordChangedCheck(userInfo);
+    let isMounted = true;
+    if (isMounted) {
+      loadOffers();
+      authorizationCheck(userInfo);
+      passwordChangedCheck(userInfo);
+      isAccessTokenValid(localStorage.getItem(constant.ACCESS_TOKEN));
+      isSessionTabValid(sessionStorage.getItem(constant.ACCESS_TOKEN));
+    }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleCheckboxChange = (index, initialChecked) => {
@@ -328,6 +336,7 @@ const SupplierView = (props) => {
       render: (_, row) => {
         let btnSplit;
         let btnConfirm;
+        let btnClosePO;
         if (
           row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
           row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
@@ -373,17 +382,50 @@ const SupplierView = (props) => {
               {t("Confirm Schedule")}
             </Button>
           );
+          if (row.hutang_kirim) {
+            btnClosePO = (
+              <Button
+                className="mr-1 mb-1"
+                size="small"
+                type="warning"
+                onClick={() => {
+                  Modal.confirm({
+                    ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
+                    content: `Request for close this PO ?`,
+                    onOk: () => {
+                      api.suppliers
+                        .closePO(row.id, false)
+                        .then((res) => {
+                          message.success("Success");
+                        })
+                        .catch((err) => {
+                          utils.swal.Error({ msg: utils.getErrMsg(err) });
+                        })
+                        .finally(() => {
+                          loadOffers();
+                        });
+                    },
+                  });
+                }}
+                style={{ whiteSpace: "normal", width: "auto", height: "auto", margin: "0 auto" }}
+              >
+                {t("Close PO Request")}
+              </Button>
+            );
+          }
           return (
             <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
               {btnSplit}
+              {btnClosePO}
               {btnConfirm}
             </div>
           );
         }
+        return;
       },
     },
     {
-      title: `${t("bulking")} ${t("action")}`,
+      title: `${t("mass")} ${t("action")}`,
       dataIndex: "bulk_action",
       fixed: "right",
       key: "bulk_action",
@@ -475,35 +517,37 @@ const SupplierView = (props) => {
             </Button>
           );
 
-          btnConfirm = (
-            <Button
-              className=""
-              size="small"
-              type="primary"
-              onClick={() => {
-                Modal.confirm({
-                  ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
-                  content: `Confirm ${countOffer()} shipment schedule ?`,
-                  onOk: () => {
-                    api.suppliers
-                      .confirm(row.id, true)
-                      .then((res) => {
-                        message.success("Success");
-                      })
-                      .catch((err) => {
-                        utils.swal.Error({ msg: utils.getErrMsg(err) });
-                      })
-                      .finally(() => {
-                        loadOffers();
-                      });
-                  },
-                });
-              }}
-              style={{ whiteSpace: "normal", width: "auto", height: "auto", margin: "0 auto" }}
-            >
-              {`Confirm ${countOffer()} Schedule`}
-            </Button>
-          );
+          if (countOffer() > 1) {
+            btnConfirm = (
+              <Button
+                className=""
+                size="small"
+                type="primary"
+                onClick={() => {
+                  Modal.confirm({
+                    ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
+                    content: `Confirm ${countOffer()} shipment schedule ?`,
+                    onOk: () => {
+                      api.suppliers
+                        .confirm(row.id, true)
+                        .then((res) => {
+                          message.success("Success");
+                        })
+                        .catch((err) => {
+                          utils.swal.Error({ msg: utils.getErrMsg(err) });
+                        })
+                        .finally(() => {
+                          loadOffers();
+                        });
+                    },
+                  });
+                }}
+                style={{ whiteSpace: "normal", width: "auto", height: "auto", margin: "0 auto" }}
+              >
+                {`Confirm ${countOffer()} Schedule`}
+              </Button>
+            );
+          }
           return (
             <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
               {btnEditAndSend}

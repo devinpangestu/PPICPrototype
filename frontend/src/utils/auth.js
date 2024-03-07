@@ -3,6 +3,7 @@ import jwt_decode from "jwt-decode";
 import constant from "constant";
 import utils from "utils";
 import handler from "handler";
+import { api } from "api";
 
 // const getCurrentTimestamp = () => {
 //   return Math.floor(Date.now() / 1000);
@@ -54,12 +55,46 @@ export const authorizationCheck = (currUserLogin) => {
       msg: "User not Authorized, please login again",
       cbFn: () => {
         // alert("ppn failed")
+        handler.handleLogoutClick();
+        return;
+      },
+    });
+  }
+};
+
+export const isAccessTokenValid = (accessToken) => {
+  api.auth
+    .accessTokenCheck(accessToken)
+    .then((response) => {
+      console.log(response);
+      const rsBody = response.data.rs_body;
+      if (!rsBody.valid) {
+        utils.swal.Error({
+          msg: "User not Authorized, please login again",
+          cbFn: () => {
+            handler.handleLogoutClick();
+            return;
+          },
+        });
+      }
+    })
+    .catch((error) => {
+      utils.swal.Error({ msg: utils.getErrMsg(error) });
+    });
+};
+
+export const isSessionTabValid = (sessionToken) => {
+  if (sessionToken !== localStorage.getItem(constant.ACCESS_TOKEN)) {
+    utils.swal.Error({
+      msg: "You're unable to open this page in a new tab",
+      cbFn: () => {
         handler.handleLogout();
         return;
       },
     });
   }
 };
+
 export const passwordChangedCheck = (currUserLogin) => {
   //check if the password never changed before because of new user
   if (!currUserLogin.password_changed) {

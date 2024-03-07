@@ -9,13 +9,14 @@ const auth = {
       data: rqBody,
     });
   },
-  logout: () => {
+  logout: (access_token, user_define) => {
     let rqConfig = {
       method: "post",
       url: `/logout`,
+      data: { access_token, user_define },
     };
     if (localStorage.getItem(constant.REFRESH_TOKEN)) {
-      rqConfig.data = { refresh_token: localStorage.getItem(constant.REFRESH_TOKEN) };
+      rqConfig.data.refresh_token = localStorage.getItem(constant.REFRESH_TOKEN);
     }
 
     return axios(rqConfig);
@@ -25,6 +26,13 @@ const auth = {
       method: "put",
       url: `/change-password`,
       data: rqBody,
+    });
+  },
+  accessTokenCheck: (accessToken) => {
+    return axios({
+      method: "post",
+      url: `/token-check`,
+      data: { access_token: accessToken },
     });
   },
 };

@@ -44,20 +44,9 @@ function ModalEditAndSend(props) {
     }
     const schedules = data
       .map((item) => ({
-        id: item.id,
+        ...item,
         submission_date: moment(item.submission_date),
-        notes: item.notes,
-        history: item.history,
-        supplier_id: item.supplier_id,
-        po_number: item.po_number,
-        po_outs: item.po_outs,
-        sku_code: item.sku_code,
-        sku_name: item.sku_name,
-        split_from_id: item.split_from_id,
-        edit_from_id: item.edit_from_id,
-        flag_status: item.flag_status,
         est_delivery: moment(item.est_delivery),
-        qty_delivery: item.qty_delivery,
       }))
       .filter((item) => {
         return (
@@ -80,6 +69,8 @@ function ModalEditAndSend(props) {
       values.schedules[key].supplier_id = parseInt(oriSchedule[key].supplier_id);
       values.schedules[key].po_qty = oriSchedule[key].po_qty;
       values.schedules[key].max_qty = oriSchedule[key].po_qty;
+      values.schedules[key].created_by_id = oriSchedule[key].created_by_id;
+      values.schedules[key].buyer_id = oriSchedule[key].buyer_id;
     }
     api.suppliers
       .editComplex(oriSchedule, values.schedules)
