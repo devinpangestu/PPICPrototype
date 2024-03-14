@@ -36,7 +36,12 @@ import ModalExport from "components/ModalExport";
 import { SectionHeading } from "components/Section";
 import ModalEdit from "./modal/ModalEdit";
 import { viewTwoNumberBehindComma } from "utils/number";
-import { authorizationCheck, isAccessTokenValid, isSessionTabValid, passwordChangedCheck } from "utils/auth";
+import {
+  authorizationCheck,
+  isAccessTokenValid,
+  isSessionTabValid,
+  passwordChangedCheck,
+} from "utils/auth";
 const { Panel } = Collapse;
 
 const Transaction = (props) => {
@@ -74,6 +79,10 @@ const Transaction = (props) => {
 
   const [modalExportShow, setModalExportShow] = useState(false);
   const [schedulePercentage, setSchedulePercentage] = useState([]);
+
+  const bothCanView =
+    utils.havePermission(userInfo.permissions, "ppic@view") ||
+    utils.havePermission(userInfo.permissions, "purchasing@view");
 
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
@@ -322,9 +331,11 @@ const Transaction = (props) => {
                   <SectionHeading
                     title={`Schedule List
                     ${item.label.po_number}
-                    ${item.label.supplier_name}
+                    ${item.label.supplier_name ? item.label.supplier_name : "Supplier Belum Ada"}
                     ${item.label.sku_count} SKU
-                    ${item.label.complete_schedule} out of ${item.label.total_schedule} Schedule Completed`}
+                    ${item.label.complete_schedule} out of ${
+                      item.label.total_schedule
+                    } Schedule Completed`}
                     style={{ fontSize: "20px", whiteSpace: "pre-line" }}
                     additionalAction={(() => {
                       return (
@@ -463,7 +474,7 @@ const Transaction = (props) => {
         render: (_, row) => {
           let btnEdit;
           let tag;
-
+          const canViewForceEdit = utils.havePermission(userInfo.permissions, "ppic@view");
           const valuesMap = statusPercentageValue[row.flag_status];
           if (row.deleted_at !== null) {
             tag = renderStatusTag("error", "Deleted");
@@ -504,26 +515,28 @@ const Transaction = (props) => {
           if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
             tag = renderStatusTag("success", "Complete");
           }
-          btnEdit = (
-            <Button
-              className="ma-0"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalEditData(row.id);
-                setModalEditShow(true);
-              }}
-              title="Available after the schedule is reach supplier"
-              disabled={
-                row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
-                row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
-                row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
-              }
-            >
-              {t("Force Edit")}
-            </Button>
-          );
+          if (canViewForceEdit) {
+            btnEdit = (
+              <Button
+                className="ma-0"
+                size="small"
+                type="primary"
+                onClick={() => {
+                  setModalEditData(row.id);
+                  setModalEditShow(true);
+                }}
+                title="Available after the schedule is reach supplier"
+                disabled={
+                  row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+                  row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+                  row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+                  row.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+                }
+              >
+                {t("Force Edit")}
+              </Button>
+            );
+          }
 
           return (
             <>
@@ -610,8 +623,7 @@ const Transaction = (props) => {
       </Row>
 
       <Row gutter={16}>
-        {utils.renderWithPermission(
-          userInfo.permissions,
+        {bothCanView && (
           <Col xs={24} lg={6} xl={6}>
             <Card size="small">
               <SectionHeading title={"Filter"} withDivider />
@@ -650,8 +662,7 @@ const Transaction = (props) => {
                 </Form.Item>
               </Form>
             </Card>
-          </Col>,
-          "ppic@view",
+          </Col>
         )}
         <Col xs={24} lg={18} xl={18}>
           <>{renderTable()}</>

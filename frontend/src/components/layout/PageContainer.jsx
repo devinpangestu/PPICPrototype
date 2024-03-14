@@ -90,7 +90,9 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
       "menu-config",
     );
   }
-
+  const canViewTransactionHistory =
+    utils.havePermission(userInfo.permissions, "purchasing@view") ||
+    utils.havePermission(userInfo.permissions, "ppic@view");
   const siderContent = (
     <>
       <div className="w-100 position-relative">
@@ -192,7 +194,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.Divider />
           </>
         )}
-        {utils.havePermission(userInfo.permissions, "ppic@view") && (
+        {canViewTransactionHistory && (
           <>
             <Menu.SubMenu
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
@@ -200,22 +202,20 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
               icon={<ScheduleOutlined />}
               title={t("Transaction")}
             >
-              {utils.renderWithPermission(
-                userInfo.permissions,
-                <Menu.Item key="/history">
-                  <NavLink
-                    to={"/history"}
-                    style={{ fontSize: conditionalMobileState("8px", "14px") }}
-                  >
-                    {t("history")}
-                  </NavLink>
-                </Menu.Item>,
-                "ppic@view",
-              )}
+              <Menu.Item key="/history">
+                <NavLink
+                  to={"/history"}
+                  style={{ fontSize: conditionalMobileState("8px", "14px") }}
+                >
+                  {t("history")}
+                </NavLink>
+              </Menu.Item>
+              ,
             </Menu.SubMenu>
             <Menu.Divider />
           </>
         )}
+
         {(utils.havePermission(
           userInfo.permissions,
           "user@view",
@@ -330,11 +330,14 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                             if (userInfo.role.id === 2) {
                               return "/ppic/dashboard";
                             } else if (userInfo.role.id === 3) {
-                              return "/purchasing/dashboard";
+                              return "/procurement/dashboard";
                             } else if (userInfo.role.id === 4) {
+                              return "/procurement/dashboard";
+                            } else if (userInfo.role.id === 5) {
                               return "/supplier/dashboard";
+                            } else if (userInfo.role.id === 6) {
+                              return "/ppic/dashboard";
                             }
-                            return "/ppic/dashboard";
                           }}
                         >
                           {t("home")}

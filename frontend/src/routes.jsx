@@ -36,7 +36,11 @@ function NoMatch() {
       } else if (userInfo.role.id === 3) {
         return window.location.replace("/procurement/dashboard");
       } else if (userInfo.role.id === 4) {
+        return window.location.replace("/procurement/dashboard");
+      } else if (userInfo.role.id === 5) {
         return window.location.replace("/supplier/dashboard");
+      } else if (userInfo.role.id === 6) {
+        return window.location.replace("/ppic/dashboard");
       }
     }
 
@@ -56,15 +60,9 @@ function NoMatch() {
   );
 }
 
-const ppicPermission = ["ppic@view", "ppic@create", "ppic@edit", "ppic@delete"];
+const ppicPermission = ["ppic@view"];
 const supplierPermission = ["supplier@view", "supplier@create", "supplier@edit", "supplier@delete"];
-const purchasingPermission = [
-  "purchasing@view",
-  "purchasing@create",
-  "purchasing@edit",
-  "purchasing@delete",
-];
-
+const purchasingPermission = ["purchasing@view"];
 const adminUserPermission = ["user@view", "user@create", "user@edit", "user@delete"];
 const adminSupplierPermission = [
   "supplier@view",
@@ -145,8 +143,20 @@ const purchasingRoutes = [
     component: PurchasingView,
     permissions: purchasingPermission,
   },
+  {
+    path: "/history",
+    component: TransactionHistoryView,
+    permissions: purchasingPermission,
+  },
 ];
 
+const qaqcRoutes = [
+  {
+    path: "/ppic/dashboard",
+    component: PPICView,
+    permissions: ppicPermission,
+  },
+];
 export const routes = [
   {
     path: "/login",
@@ -165,6 +175,7 @@ export const routes = [
   ...supplierRoutes,
   ...purchasingRoutes,
   ...ppicRoutes,
+  ...qaqcRoutes,
   ...adminRoutes,
   {
     path: "/",

@@ -124,7 +124,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         auto_fill: true,
       };
     } else {
-      console.log("sini");
+      
       modalConfirmObj = {
         id,
         is_edit: isEdit,
@@ -144,10 +144,10 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         est_delivery: moment(values.est_delivery).format(constant.FORMAT_API_DATE),
         auto_fill: false,
       };
-      console.log("sini2");
+      
     }
     if (isEdit) {
-      console.log("sini3");
+      
       api.ppic
         .edit(modalConfirmObj)
         .then(function (response) {

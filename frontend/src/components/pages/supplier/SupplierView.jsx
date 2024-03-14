@@ -27,7 +27,14 @@ import constant from "constant";
 import ModalSplitSchedule from "./modal/ModalSplitSchedule";
 import handler from "handler";
 import ModalEditAndSend from "./modal/ModalEditAndSend";
-import { authorizationCheck, isAccessTokenValid, isMobile, isSessionTabValid, passwordChangedCheck } from "utils/auth";
+import ModalClosePO from "./modal/ModalClosePO";
+import {
+  authorizationCheck,
+  isAccessTokenValid,
+  isMobile,
+  isSessionTabValid,
+  passwordChangedCheck,
+} from "utils/auth";
 import { usePageStore } from "state/pageState";
 
 const SupplierView = (props) => {
@@ -46,6 +53,8 @@ const SupplierView = (props) => {
 
   const [modalSplitScheduleShow, setModalSplitScheduleShow] = useState(false);
   const [modalSplitScheduleData, setModalSplitScheduleData] = useState(null);
+  const [modalClosePOShow, setModalClosePOShow] = useState(false);
+  const [modalClosePOData, setModalClosePOData] = useState(null);
   const [modalEditAndSendShow, setModalEditAndSendShow] = useState(false);
   const [modalEditAndSendData, setModalEditAndSendData] = useState(null);
   const [previewRowChecked, setPreviewRowChecked] = useState([]);
@@ -284,6 +293,16 @@ const SupplierView = (props) => {
       },
     },
     {
+      title: t("sendSupplierDate"),
+      dataIndex: "send_supplier_date",
+      key: "send_supplier_date",
+      render: (_, row) => {
+        return row.send_supplier_date
+          ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
+    {
       title: t("estDelivery"),
       dataIndex: "est_delivery",
       key: "est_delivery",
@@ -337,6 +356,20 @@ const SupplierView = (props) => {
         let btnSplit;
         let btnConfirm;
         let btnClosePO;
+        let tagHutangKirim;
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
+          </div>
+        );
         if (
           row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
           row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
@@ -383,12 +416,15 @@ const SupplierView = (props) => {
             </Button>
           );
           if (row.hutang_kirim) {
+            tagHutangKirim = renderTag("error", "Hutang Kirim");
             btnClosePO = (
               <Button
                 className="mr-1 mb-1"
                 size="small"
                 type="warning"
                 onClick={() => {
+                  // setModalClosePOData(row);
+                  // setModalClosePOShow(true);
                   Modal.confirm({
                     ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
                     content: `Request for close this PO ?`,
@@ -415,6 +451,7 @@ const SupplierView = (props) => {
           }
           return (
             <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              {tagHutangKirim}
               {btnSplit}
               {btnClosePO}
               {btnConfirm}
@@ -501,7 +538,15 @@ const SupplierView = (props) => {
                     const data = res.data.rs_body;
 
                     setModalEditAndSendData(
-                      data.filter((item) => item.is_split === false && item.is_edit === false),
+                      data.filter(
+                        (item) =>
+                          item.is_split === false &&
+                          item.is_edit === false &&
+                          (item.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+                            item.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                            item.flag_status === constant.FLAG_STATUS_PPIC_REQUEST ||
+                            item.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE),
+                      ),
                     );
                     setModalEditAndSendShow(true);
                   })
@@ -577,6 +622,18 @@ const SupplierView = (props) => {
           loadOffers();
         }}
         data={modalSplitScheduleData}
+      />
+      <ModalClosePO
+        visible={modalClosePOShow}
+        onCancel={() => {
+          setModalClosePOShow(false);
+        }}
+        onSuccess={() => {
+          setModalClosePOShow(false);
+          message.success("Offer Splitted Successfully");
+          loadOffers();
+        }}
+        data={modalClosePOData}
       />
       <ModalEditAndSend
         visible={modalEditAndSendShow}

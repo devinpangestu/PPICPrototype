@@ -246,7 +246,7 @@ export const SupplierScheduleEdit = async (req, res) => {
           ori_schedules.find((x) => x.id == schedules[key].id)?.history
         );
         console.log(246);
-        console.log(getExistingNotes);
+        console.log({ ...schedules[key] });
         await db.OFFERS.update(
           {
             is_edit: true,
@@ -273,12 +273,15 @@ export const SupplierScheduleEdit = async (req, res) => {
           {
             where: { id: schedules[key].id },
           },
-          { dbTransaction }
+          { transaction: dbTransaction }
         );
         console.log(275);
 
         await db.OFFERS.create(
           {
+            hutang_kirim: schedules[key].hutang_kirim,
+            io_filter: schedules[key].io_filter,
+            category_filter: schedules[key].category_filter,
             po_number: schedules[key].po_number,
             supplier_id: parseInt(schedules[key].supplier_id),
             submission_date: new Date(schedules[key].submission_date),
@@ -327,7 +330,7 @@ export const SupplierScheduleEdit = async (req, res) => {
             updated_at: new Date(),
             buyer_id: schedules[key].buyer_id,
           },
-          { dbTransaction }
+          { transaction: dbTransaction }
         );
         console.log(345);
       }
@@ -420,11 +423,11 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
-              )} Request split schedule by ${userName} from ${
+              )} Request split schedule by ${userName} from ${moment(
                 offerToSplitted.est_delivery
-              } to ${schedules[key].est_delivery} with qty ${
-                schedules[key].qty_delivery
-              }`,
+              ).format(constant.FORMAT_DISPLAY_DATETIME)} to ${
+                schedules[key].est_delivery
+              } with qty ${schedules[key].qty_delivery}`,
               created_at: new Date(),
               created_by: userName,
             },
@@ -451,11 +454,11 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
-              )} Request split schedule by ${userName} from ${
+              )} Request split schedule by ${userName} from ${moment(
                 offerToSplitted.est_delivery
-              } to ${schedules[key].est_delivery} with qty ${
-                schedules[key].qty_delivery
-              }`,
+              ).format(constant.FORMAT_DISPLAY_DATETIME)} to ${
+                schedules[key].est_delivery
+              } with qty ${schedules[key].qty_delivery}`,
               created_at: new Date(),
               created_by: userName,
             },
@@ -464,7 +467,9 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
           flag_status: "F",
         };
       }
-      await db.OFFERS.create(payloadForSplittedSchedule, { dbTransaction });
+      await db.OFFERS.create(payloadForSplittedSchedule, {
+        transaction: dbTransaction,
+      });
     }
 
     //update original schedule
@@ -489,7 +494,7 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
       {
         where: { id: offer_id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     await dbTransaction.commit();
@@ -550,7 +555,7 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
       {
         where: { id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     await dbTransaction.commit();
@@ -569,6 +574,7 @@ export const SupplierScheduleConfirm = async (req, res) => {
     const { id } = req.params;
     const { mass } = req.query;
     const userId = getUserID(req);
+    const userName = getUserName(req);
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -609,14 +615,14 @@ export const SupplierScheduleConfirm = async (req, res) => {
                 created_by: userName,
               },
             ]),
-
+            supplier_confirm_date: new Date(),
             updated_at: new Date(),
             updated_by_id: userId,
           },
           {
             where: { id: getAnotherIfExist[key].id },
           },
-          { dbTransaction }
+          { transaction: dbTransaction }
         );
       }
     } else {
@@ -639,13 +645,14 @@ export const SupplierScheduleConfirm = async (req, res) => {
               created_by: userName,
             },
           ]),
+          supplier_confirm_date: new Date(),
           updated_at: new Date(),
           updated_by_id: userId,
         },
         {
           where: { id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
 
@@ -662,6 +669,7 @@ export const SupplierScheduleConfirmSelectedData = async (req, res) => {
   try {
     const { schedules } = req.body.rq_body;
     const userId = getUserID(req);
+    const userName = getUserName(req);
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -686,13 +694,14 @@ export const SupplierScheduleConfirmSelectedData = async (req, res) => {
           ]),
 
           flag_status: "X",
+          supplier_confirm_date: new Date(),
           updated_at: new Date(),
           updated_by_id: userId,
         },
         {
           where: { id: schedules[key].id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
 

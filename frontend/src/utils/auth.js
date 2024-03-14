@@ -66,7 +66,6 @@ export const isAccessTokenValid = (accessToken) => {
   api.auth
     .accessTokenCheck(accessToken)
     .then((response) => {
-      console.log(response);
       const rsBody = response.data.rs_body;
       if (!rsBody.valid) {
         utils.swal.Error({

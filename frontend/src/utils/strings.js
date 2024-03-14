@@ -11,3 +11,6 @@ export const snakeToTitleCase = (str) => {
     })
     .join(" ");
 };
+export const capitalizeCase = (str) => {
+  return str.toUpperCase();
+};

@@ -235,7 +235,7 @@ function ModalSplitSchedule(props) {
                                   max={maxSplitQty}
                                   value={newSplit.qty_delivery || ""}
                                 />
-                                {console.log(maxSplitQty)}
+                                
                               </Form.Item>
                             </Col>
                           </Row>

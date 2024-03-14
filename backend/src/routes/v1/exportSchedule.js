@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get(
   "/reports/data/:type/:file_name",
-  ExportController.ExportSupplierTrnHist
+  ExportController.DownloadExportExcelFile
 );
 
 export default router;

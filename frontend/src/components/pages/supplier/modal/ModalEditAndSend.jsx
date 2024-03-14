@@ -63,7 +63,7 @@ function ModalEditAndSend(props) {
 
   const handleOnSubmit = (values) => {
     setProcessing(true);
-    console.log(values);
+
     for (let key in oriSchedule) {
       values.schedules[key].id = oriSchedule[key].id;
       values.schedules[key].supplier_id = parseInt(oriSchedule[key].supplier_id);
@@ -146,6 +146,7 @@ function ModalEditAndSend(props) {
                         removeBtnText = t("remove");
                         dividerClsName = "my-3";
                       }
+                      console.log(data[key].flag_status);
                       if (
                         data[key].flag_status === constant.FLAG_STATUS_SUPPLIER &&
                         data[key].flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE &&

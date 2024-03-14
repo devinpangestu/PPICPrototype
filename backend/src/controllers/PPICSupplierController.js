@@ -65,7 +65,8 @@ export const PPICSupplierRefreshOracle = async (req, res) => {
       return errorResponse(req, res, "User not authorized");
     }
 
-    const err = await refreshOracle(transaction);
+    let err = await refreshOracle(transaction);
+
     if (!err) {
       await transaction.rollback();
       return errorResponse(
@@ -116,7 +117,7 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
           id,
         },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     const passwordToCreate = uniqueId(8);
@@ -148,7 +149,7 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
     //TODO : ADD SEND EMAIL
     await sendEmailVerification(
       supplier.email,
-      `Welcoming ${supplier.name}!`,
+      `Welcome ${supplier.name}!`,
       passwordToCreate
     );
     await db.USERS.create({
@@ -157,7 +158,7 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
       password: newPasswordToHash,
       name: `${supplier.name}`,
       supplier_id: supplier.ref_id,
-      role_id: 4,
+      role_id: 5,
       created_at: new Date(),
       updated_at: new Date(),
       created_by_id: userId,
@@ -820,7 +821,7 @@ export const PPICSupplierTransactions = async (req, res) => {
 export const testOPENQUERY = async (req, res) => {
   try {
     const runQuery = async () => {
-      const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT AP_SUPPLIERS.SEGMENT1 "Supplier Number",
+      const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT AP_SUPPLIERS.SEGMENT1 "Supplier Number",
       AP_SUPPLIERS.VENDOR_NAME "Supplier Name",
       AP_SUPPLIER_SITES_ALL.VENDOR_SITE_CODE "Vendor Site Code",
       HZ_CONTACT_POINTS.EMAIL_ADDRESS "Email Address"
@@ -960,7 +961,7 @@ async function history(db, supplierId) {
 
 export const refreshOracle = async (transaction) => {
   const runQuery = async () => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT 
     AP_SUPPLIERS.VENDOR_ID "ref_id",
     AP_SUPPLIERS.SEGMENT1 "supplier_number",
             AP_SUPPLIERS.VENDOR_NAME "name",

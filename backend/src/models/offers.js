@@ -106,6 +106,14 @@ export default (sequelize, DataTypes) => {
         defaultValue: DataTypes.NOW,
         type: DataTypes.DATE,
       },
+      send_supplier_date: {
+        defaultValue: null,
+        type: DataTypes.DATE,
+      },
+      supplier_confirm_date: {
+        defaultValue: null,
+        type: DataTypes.DATE,
+      },
       hutang_kirim: {
         defaultValue: false,
         type: DataTypes.BOOLEAN,

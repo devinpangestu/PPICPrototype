@@ -18,6 +18,9 @@ import purchasingRoutes from "./routes/v1/purchasing.js";
 
 import transactionRoutes from "./routes/v1/transaction.js";
 
+import exportsRoutes from "./routes/v1/export.js";
+import exportScheduleRoutes from "./routes/v1/exportSchedule.js";
+
 import userRoutes from "./routes/v1/user.js";
 import bodyParser from "body-parser";
 
@@ -37,6 +40,8 @@ import {
   dailyJobUpdatePOOutstanding,
   dailyJobSupplierRefreshSupplierUser,
 } from "./middlewares/cronjobs.js";
+import rateLimit from "express-rate-limit";
+import { dynamicRateLimit } from "./middlewares/requestHandling.js";
 
 const app = express();
 
@@ -100,10 +105,18 @@ app.set("view engine", "ejs");
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-console.log("dirname", __dirname);
 app.use(express.static(path.join(__dirname, "public")));
 app.use(cookieParser());
+// const globalLimiter = rateLimit({
+//   windowMs: 10 * 1000, // 10sec
+//   limit: 5, // Limit each IP to 100 requests per `window` (here, per 15 minutes).
+//   standardHeaders: "draft-7", // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
+//   legacyHeaders: false, // Disable the `X-RateLimit-*` headers.
+//   // store: ... , // Redis, Memcached, etc. See below.
+// });
 
+// // Apply the rate limiting middleware to all requests.
+// app.use(globalLimiter);
 app.get(`${currVer}`, async (req, res) => {
   try {
     const packageJson = fs.readFileSync("package.json");
@@ -127,6 +140,7 @@ app.get(`${currVer}/config`, (req, res) => {
     API_TIMEOUT: process.env.API_TIMEOUT || 30000,
   });
 });
+
 app.use(`${currVer}`, authRoutes);
 app.use(`${currVer}/roles`, userIsAuthenticated(), roleRoutes);
 app.use(`${currVer}`, userIsAuthenticated(), permissionRoutes);
@@ -144,6 +158,8 @@ app.use(
   verifyTokenAndRole("purchasing@view"),
   purchasingRoutes
 );
+app.use(`${currVer}/export/xlsx`, exportsRoutes);
+app.use(`/`, exportScheduleRoutes);
 
 app.use((req, res, next) => {
   next(createHttpError(404, "Endpoint not found"));

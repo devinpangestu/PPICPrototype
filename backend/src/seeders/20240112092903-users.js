@@ -36,6 +36,21 @@ module.exports = {
           updated_at: new Date("2022-08-28"),
         },
         {
+          user_id: "procadmin",
+          name: "Procurement Admin",
+          password:
+            "$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66",
+          password_changed_at: new Date("2021-08-02"),
+          last_used_password:
+            '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
+          email: "devinpangestu2000@gmail.com",
+          role_id: 3,
+          oracle_username: null,
+          created_at: new Date("2021-08-02"),
+          created_by_id: 1,
+          updated_at: new Date("2022-08-28"),
+        },
+        {
           user_id: "proctest1",
           name: "Procurement Dummy 1",
           password:
@@ -44,7 +59,7 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu2000@gmail.com",
-          role_id: 3,
+          role_id: 4,
           oracle_username: "X2X.UPCH1",
           created_at: new Date("2021-08-02"),
           created_by_id: 1,
@@ -59,8 +74,8 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu1980@gmail.com",
-          role_id: 3,
-          oracle_username: "X2X.UPCH2",
+          role_id: 4,
+          oracle_username: "X2X.UPCH3",
           created_at: new Date("2021-08-02"),
           created_by_id: 1,
           updated_at: new Date("2022-08-28"),
@@ -74,8 +89,38 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu1980@gmail.com",
-          role_id: 3,
-          oracle_username: "X2X.UPCH3",
+          role_id: 4,
+          oracle_username: "X2X.SPCH2",
+          created_at: new Date("2021-08-02"),
+          created_by_id: 1,
+          updated_at: new Date("2022-08-28"),
+        },
+        {
+          user_id: "proctest4",
+          name: "Procurement Dummy 4",
+          password:
+            "$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66",
+          password_changed_at: new Date("2021-08-02"),
+          last_used_password:
+            '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
+          email: "devinpangestu2000@gmail.com",
+          role_id: 4,
+          oracle_username: "X2X.SPCH3",
+          created_at: new Date("2021-08-02"),
+          created_by_id: 1,
+          updated_at: new Date("2022-08-28"),
+        },
+        {
+          user_id: "proctest5",
+          name: "Procurement Dummy 5",
+          password:
+            "$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66",
+          password_changed_at: new Date("2021-08-02"),
+          last_used_password:
+            '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
+          email: "devinpangestu2000@gmail.com",
+          role_id: 4,
+          oracle_username: "X2X.SPCH4",
           created_at: new Date("2021-08-02"),
           created_by_id: 1,
           updated_at: new Date("2022-08-28"),
@@ -89,7 +134,7 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu2000@gmail.com",
-          role_id: 4,
+          role_id: 5,
           supplier_id: 624,
           created_at: new Date("2021-08-02"),
           created_by_id: 1,
@@ -104,7 +149,7 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu2000@gmail.com",
-          role_id: 4,
+          role_id: 5,
           supplier_id: 372068,
           created_at: new Date("2021-08-02"),
           created_by_id: 1,
@@ -119,7 +164,7 @@ module.exports = {
           last_used_password:
             '["$2a$04$3d1O745ShmWJJabf8X54XuSbP7oBjdmlghUuKpRi5cPf.MUqGtK66"]',
           email: "devinpangestu2000@gmail.com",
-          role_id: 4,
+          role_id: 5,
           supplier_id: 752,
           created_at: new Date("2021-08-02"),
           created_by_id: 1,

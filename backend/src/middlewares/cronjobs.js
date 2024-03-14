@@ -326,7 +326,7 @@ export const dailyJobUpdatePOOutstanding = () => {
                     sku_code,
                   },
                 },
-                { dbTransaction }
+                { transaction: dbTransaction }
               );
             }
           }
@@ -350,7 +350,7 @@ const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
   const getLineNumber = await OpenQueryGetLineNum(poNumber, skuCode);
   console.log(getLineNumber);
   const getPOOuts = (po) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT
       SUM(PO_DISTRIBUTIONS_ALL.QUANTITY_ORDERED - PO_DISTRIBUTIONS_ALL.QUANTITY_DELIVERED - PO_DISTRIBUTIONS_ALL.QUANTITY_CANCELLED) "QUANTITY_OUTSTANDING"
       FROM APPS.PO_HEADERS_ALL, APPS.PO_LINES_ALL, APPS.PO_DISTRIBUTIONS_ALL
       WHERE PO_HEADERS_ALL.SEGMENT1 = ''${po}''
@@ -377,7 +377,7 @@ const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
 const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
   const skuSplit = skuCode.split(".");
   const getPODetails = (po, skucode) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
     SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pla.line_num line_number, msi.description nama_sku
     from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
     APPS.ap_suppliers aps, APPS.mtl_system_items msi

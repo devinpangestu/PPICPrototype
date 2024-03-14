@@ -13,25 +13,30 @@ export default (sequelize, DataTypes) => {
   }
   LOG_TRANSACTIONS.init(
     {
-      datetime: {
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-        type: DataTypes.DATE,
-      },
       id: {
-        allowNull: false,
+        autoIncrement: true,
         primaryKey: true,
+        allowNull: false,
+        type: DataTypes.NUMERIC,
+      },
+      offer_id: {
+        allowNull: false,
+        type: DataTypes.NUMERIC,
+      },
+      master_log_type: {
+        allowNull: false,
         type: DataTypes.STRING,
       },
-      is_on_time: {
-        defaultValue: null,
-        type: DataTypes.BOOLEAN,
+      log_detail: { allowNull: false, type: DataTypes.TEXT },
+      log_timestamp: {
+        defaultValue: DataTypes.NOW,
+        type: DataTypes.DATE,
       },
     },
     {
       sequelize,
+      tableName: "log_transactions",
       modelName: "LOG_TRANSACTIONS",
-
       freezeTableName: true,
       timestamps: false,
       schema: process.env.NODE_MSSQL_MAINSCHEMA,

@@ -53,14 +53,7 @@ const App = () => {
           {routes.map((route) => {
             // Check if maintenance mode is active
 
-            if (route.maintenance && userInfo && userInfo.employee_id !== "superuser") {
-              // Redirect to maintenance page or show a message
-              return <CustomRedirect key={route.path} path={route.path} to="/maintenance" />;
-            }
-            if (route.deprecated && userInfo && userInfo.employee_id !== "superuser") {
-              // Redirect to maintenance page or show a message
-              return <CustomRedirect key={route.path} path={route.path} to="/deprecated" />;
-            }
+            
 
             // Check if route has redirectTo property
             if (route.redirectTo) {

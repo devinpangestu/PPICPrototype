@@ -15,45 +15,28 @@ import {
   parsingStringToDateLate,
 } from "../utils/parsing.js";
 import { initStyles } from "../utils/excelConstructor/excelStyles.js";
+import {
+  exportPPICSchedule,
+  exportPurchasingSchedule,
+} from "../utils/export/export_purchasing.js";
 
 export const ExportXLSX = async (req, res) => {
-  const { export_type, from_date, to_date } = req.body.rq_body;
+  const { export_type, data } = req.body.rq_body;
   try {
-    if (
-      new Date(parsingStringToDateEarly(from_date)).getTime() >
-      new Date(parsingStringToDateLate(to_date)).getTime()
-    ) {
-      return errorResponse(
-        req,
-        res,
-        "Tanggal akhir tidak boleh lebih kecil dari tanggal awal"
-      );
-    }
-
-    // if (
-    //   new Date(parsingStringToDateEarly(to_date)).getTime() >
-    //   new Date().getTime()
-    // ) {
-    //   return errorResponse(
-    //     req,
-    //     res,
-    //     "Tanggal akhir tidak boleh lebih besar dari tanggal hari ini"
-    //   );
-    // }
-
     const wb = new xl.Workbook({
       workbookView: {
         autoFilterDateGrouping: true,
       },
     });
     const styles = initStyles(wb);
+
     let ws;
     let ws2;
     let fNamePrefix = "";
     let fileName = "";
     let reportPath = "";
     let err;
-    
+
     switch (export_type) {
       case constant.EXPORT_TYPE_OFFER:
         fNamePrefix = constant.FNAME_PREFIX_OFFER;
@@ -61,23 +44,25 @@ export const ExportXLSX = async (req, res) => {
           sheetView: { zoomScale: 80 },
         });
 
-        fileName = `${fNamePrefix}_${from_date}_${to_date}`;
+        fileName = `${fNamePrefix}_`;
         reportPath = "/offer";
-        err = await exportOfferData(ws, styles, from_date, to_date);
+        // err = await exportOfferData(ws, styles, from_date, to_date);
         break;
-      case constant.EXPORT_TYPE_TRN_HIST:
-        fNamePrefix = constant.FNAME_PREFIX_TRN_HIST;
+      case constant.EXPORT_TYPE_PPIC:
+        fNamePrefix = constant.FNAME_PREFIX_PPIC;
         ws = wb.addWorksheet(fNamePrefix, { sheetView: { zoomScale: 80 } });
-        ws2 = wb.addWorksheet("Budget Freight", {
-          sheetView: { zoomScale: 100 },
-          sheetFormat: {
-            baseColWidth: 7,
-          },
-        });
-        fileName = `${fNamePrefix}_${from_date}_${to_date}`;
-        reportPath = "/transaction-history";
-        // err = await exportTrnHist(ws, ws2, styles, from_date, to_date);
-        err = await exportTrnHistV2(ws, ws2, styles, from_date, to_date);
+        fileName = `${fNamePrefix}_`;
+        reportPath = "/ppic";
+        err = await exportPPICSchedule(ws, styles, data);
+
+        break;
+
+      case constant.EXPORT_TYPE_PURCHASING:
+        fNamePrefix = constant.FNAME_PREFIX_PURCHASING;
+        ws = wb.addWorksheet(fNamePrefix, { sheetView: { zoomScale: 80 } });
+        fileName = `${fNamePrefix}_`;
+        reportPath = "/purchasing";
+        err = await exportPurchasingSchedule(ws, styles, data);
 
         break;
       // case constant.EXPORT_TYPE_SUPPLIER_TRN_HIS:
@@ -100,7 +85,7 @@ export const ExportXLSX = async (req, res) => {
 
     const fileNameWithExt = `${fileName}.xlsx`;
     const filePath = `src/bin/storages${reportPath}/${fileNameWithExt}`;
-    const resURL = `${process.env.BASE_URL}/reports/data${reportPath}/${fileNameWithExt}`;
+    const resURL = `${process.env.BASE_URL}:${process.env.API_PORT}/reports/data${reportPath}/${fileNameWithExt}`;
 
     //Opening a file for both reading and writing, throwing an exception if the file doesn't exist.
 
@@ -126,12 +111,13 @@ export const ExportXLSX = async (req, res) => {
   }
 };
 
-export const ExportSupplierTrnHist = async (req, res) => {
+export const DownloadExportExcelFile = async (req, res) => {
   const { type, file_name } = req.params;
 
   try {
     const fileNameWithExt = `${file_name}`;
     const filePath = `src/bin/storages/${type}/${fileNameWithExt}`;
+    console.log(filePath);
     res.download(filePath); // Trigger the download
   } catch (error) {
     res.status(500).send(error.message);
@@ -140,7 +126,7 @@ export const ExportSupplierTrnHist = async (req, res) => {
 
 const isFileLocked = async (filePath) => {
   try {
-    const fs2 = fs.promises
+    const fs2 = fs.promises;
     const fileHandle = await fs2.open(filePath, "r+");
     await fileHandle.close(); // Close the file handle
     return false; // The file is not locked (can be written)

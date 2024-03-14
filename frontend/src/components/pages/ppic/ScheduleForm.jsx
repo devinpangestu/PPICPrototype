@@ -13,6 +13,7 @@ import {
   InputNumber,
 } from "antd";
 import { SpinnerOverlay, SyncOverlay } from "components";
+import { ReloadOutlined } from "@ant-design/icons";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
 import utils from "utils";
@@ -21,6 +22,7 @@ import configs from "configs";
 import handler from "handler";
 import moment from "moment";
 import ModalConfirmCreate from "./modal/ModalConfirmCreate";
+import Search from "antd/lib/input/Search";
 
 const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
   const [t] = useTranslation();
@@ -34,6 +36,9 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
   const [autoFill, setAutoFill] = useState(false);
   const [hutangKirim, setHutangKirim] = useState(false);
   const [lineNumShowManual, setLineNumShowManual] = useState(false);
+  const [skuCodeShowManual, setSkuCodeShowManual] = useState(false);
+  const [disableSubmit, setDisableSubmit] = useState(true);
+  const [disableRefreshPOPR, setDisableRefreshPOPR] = useState(true);
 
   const handleSwitchAutoFillChange = (checked) => {
     setAutoFill(checked);
@@ -128,6 +133,8 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     form.resetFields();
   };
 
+  const handleRefreshPOPR = (value, _e, info) => console.log(value);
+
   const handleOnSubmit = async (values) => {
     setPageLoading(true);
     setFormData(values);
@@ -211,10 +218,14 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
         setModalConfirmCreateData(dataToShow);
         setModalConfirmCreateShow(true);
       } else {
-        if (values.po_number) {
+        if (
+          values.po_number.substring(0, 2) === "PO" ||
+          values.po_number.substring(0, 2) === "PI"
+        ) {
           const dataToShow = await api.ppic
             .getPODetail(modalConfirmObj)
             .then(function (response) {
+              console.log(response);
               modalConfirmObj.submission_date = moment(values.submission_date);
               modalConfirmObj.io_filter = values.io_filter;
               modalConfirmObj.category_filter = values.category_filter;
@@ -248,7 +259,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
           values.po_number === "" ||
           values.po_number === null
         ) {
-          console.log(values);
           dataToShow.submission_date = moment(values.submission_date);
           dataToShow.io_filter = values.io_filter;
           dataToShow.category_filter = values.category_filter;
@@ -262,6 +272,38 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
           dataToShow.est_delivery = moment(values.est_delivery);
           dataToShow.notes_ppic = values.notes;
           dataToShow.hutang_kirim = values.hutang_kirim;
+          setModalConfirmCreateData(dataToShow);
+          setModalConfirmCreateShow(true);
+        } else if (values.po_number.substring(0, 2) === "PR") {
+          const dataToShow = await api.ppic
+            .getPODetail(modalConfirmObj)
+            .then(function (response) {
+              console.log(response.data.rs_body);
+              modalConfirmObj.submission_date = moment(values.submission_date);
+              modalConfirmObj.io_filter = values.io_filter;
+              modalConfirmObj.category_filter = values.category_filter;
+              modalConfirmObj.po_number = values.po_number;
+              modalConfirmObj.po_qty = response.data.rs_body.PR_QTY;
+              modalConfirmObj.po_outs = response.data.rs_body.QUANTITY_OUTSTANDING;
+              modalConfirmObj.sku_code = response.data.rs_body.SKU_CODE;
+              modalConfirmObj.sku_name = response.data.rs_body.SKU_NAME;
+              modalConfirmObj.line_num = response.data.rs_body.LINE_NUMBER;
+              modalConfirmObj.qty_delivery = Number(values.qty_delivery);
+              modalConfirmObj.est_delivery = moment(values.est_delivery);
+              modalConfirmObj.buyer_name = response.data.rs_body.USER_NAME;
+              modalConfirmObj.hutang_kirim = values.hutang_kirim;
+              modalConfirmObj.notes_ppic = values.notes;
+              return modalConfirmObj;
+            })
+            .catch(function (error) {
+              setModalConfirmCreateShow(false);
+              setModalConfirmCreateData({});
+              utils.swal.Error({ msg: utils.getErrMsg(error) });
+              onCancel();
+            })
+            .finally(function () {
+              setPageLoading(false);
+            });
           setModalConfirmCreateData(dataToShow);
           setModalConfirmCreateShow(true);
         }
@@ -386,7 +428,14 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                     { required: true, message: `${t("please")} ${t("input")} ${t("No PR/PO")}` },
                   ]}
                 >
-                  <Input placeholder={`${t("input")} ${t("No PR/PO")}`} />
+                  <Search
+                    placeholder={`${t("input")} ${t("No PR/PO")}`}
+                    allowClear
+                    onSearch={onSearch}
+                    style={{
+                      width: 200,
+                    }}
+                  />
                 </Form.Item>
               </Col>
               <Col span={12}>
@@ -543,12 +592,34 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                   <Input
                     onChange={(e) => {
                       if (e.target.value) {
-                        setLineNumShowManual(true);
+                        setDisableRefreshPOPR(false);
+                        if (e.target.value.substring(0, 2) === "PR") {
+                          setLineNumShowManual(true);
+                          setSkuCodeShowManual(true);
+                        } else if (
+                          e.target.value.substring(0, 2) === "PO" ||
+                          e.target.value.substring(0, 2) === "PI"
+                        ) {
+                          setSkuCodeShowManual(false);
+                          setLineNumShowManual(true);
+                        } else {
+                          setSkuCodeShowManual(false);
+                          setLineNumShowManual(false);
+                        }
                       } else {
+                        setDisableRefreshPOPR(true);
                         setLineNumShowManual(false);
                       }
                     }}
                     placeholder={`${t("input")} ${t("No PR/PO")}`}
+                    addonAfter={
+                      <Button
+                        type="primary"
+                        icon={<ReloadOutlined />}
+                        onClick={handleRefreshPOPR}
+                        disabled={disableRefreshPOPR}
+                      />
+                    }
                   />
                 </Form.Item>
               </Col>
@@ -581,7 +652,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
             )}
             {!lineNumShowManual && (
               <>
-                {" "}
                 <Row gutter={16}>
                   <Col span={12}>
                     <Form.Item
@@ -652,6 +722,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                 </Row>
               </>
             )}
+
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
@@ -713,7 +784,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
               <Button type="secondary" className="mr-2" onClick={onCancel}>
                 {t("cancel")}
               </Button>
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" disabled={disableSubmit}>
                 {t("submit")}
               </Button>
             </Form.Item>

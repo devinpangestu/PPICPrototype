@@ -9,6 +9,8 @@ export const id = {
     SKUName: "Nama SKU",
     qtyDelivery: "Qty Pengiriman",
     estDelivery: "Rencana Kirim",
+    sendSupplierDate: "Tanggal Kirim ke Supplier",
+    supplierConfirmDate: "Tanggal Supplier Konfirmasi",
     buyerName: "Nama Pembeli",
 
     recommendation: "Rekomen",
@@ -209,7 +211,7 @@ export const id = {
     typeChat: "Tulis pesan",
     chatIsEmpty: "Tidak ada percakapan",
     seeAllHistory: "Lihat semua histori",
-    exportXLSX: "Export as .xlsx",
+    exportXLSX: "Export view as .xlsx",
     export: "Export",
     bySystem: "Dihitung sistem",
     prices: "Harga",

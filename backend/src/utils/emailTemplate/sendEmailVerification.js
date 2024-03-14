@@ -6,6 +6,7 @@ dotenv.config();
 export const sendEmailVerification = async (email, subject, password) => {
   try {
     const transporter = nodemailer.createTransport({
+      service: "smtp.office365.com",
       host: env.EMAIL_HOST,
       port: env.EMAIL_PORT,
       secure: env.EMAIL_SECURE,
@@ -13,11 +14,11 @@ export const sendEmailVerification = async (email, subject, password) => {
         user: env.EMAIL_USERNAME,
         pass: env.EMAIL_PASSWORD,
       },
-      tls: {
-        ciphers: "SSLv3",
-      },
+      // tls: {
+      //   ciphers: "SSLv3",
+      // },
     });
-    const baseUrl = `${process.env.BASE_URL}:${process.env.API_PORT}`;
+  
     const mailOptions = {
       from: `PT. Bina Karya Prima - PPIC <${env.EMAIL_USERNAME}>`,
       to: email,
@@ -234,8 +235,10 @@ export const sendEmailVerification = async (email, subject, password) => {
       <td class="pad" style="padding-bottom:10px;padding-left:40px;padding-right:40px;padding-top:10px;">
       <div style="color:#555555;font-family:Montserrat, Trebuchet MS, Lucida Grande, Lucida Sans Unicode, Lucida Sans, Tahoma, sans-serif;font-size:15px;line-height:150%;text-align:left;mso-line-height-alt:22.5px;">
       <p style="margin: 0;">Hello,</p>
-      <p style="margin: 0;">Somebody just used this email address to register at PT. Bina Karya Prima Schedule System.</p>
+      <p style="margin: 0;">System just used this email address to register at PT. Bina Karya Prima Schedule System.</p>
       <p style="margin: 0;">If this was you, please logging in using this information</p>
+      <p style="margin: 0;"> </p>
+      <p style="margin: 0;">at URL : ${env.BASE_URL_CLIENT} </p>
       <p style="margin: 0;"> </p>
       <strong><p style="margin: 0;">
       User: ${email}
@@ -325,7 +328,7 @@ export const sendEmailVerification = async (email, subject, password) => {
       <tr>
       <td class="pad" style="padding-bottom:30px;padding-left:40px;padding-right:40px;padding-top:20px;">
       <div style="color:#ffffff;font-family:Montserrat, Trebuchet MS, Lucida Grande, Lucida Sans Unicode, Lucida Sans, Tahoma, sans-serif;font-size:12px;font-weight:700;line-height:120%;text-align:left;mso-line-height-alt:14.399999999999999px;">
-      <p style="margin: 0; word-break: break-word;"><span style="color: #95979c;">PT. Bina Karya Prima Copyright © 2024</span></p>
+      <p style="margin: 0; word-break: break-word;"><span style="color: #95979c;">PT. Bina Karya Prima Copyright © ${new Date().getFullYear()}</span></p>
       </div>
       </td>
       </tr>

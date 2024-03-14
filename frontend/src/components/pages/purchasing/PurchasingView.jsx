@@ -38,9 +38,16 @@ import moment from "moment";
 
 import handler from "handler";
 import ModalReturSchedule from "./modal/ModalReturSchedule";
-import { authorizationCheck, isAccessTokenValid, isMobile, isSessionTabValid, passwordChangedCheck } from "utils/auth";
+import {
+  authorizationCheck,
+  isAccessTokenValid,
+  isMobile,
+  isSessionTabValid,
+  passwordChangedCheck,
+} from "utils/auth";
 import { Decrypt } from "utils/encryption";
 import { renderPlainColFindLabel } from "utils/table";
+import ModalExport from "components/ModalExport";
 
 const EditableContext = React.createContext(null);
 const EditableRow = ({ index, ...props }) => {
@@ -184,6 +191,7 @@ const PurchasingView = (props) => {
   const statusMapping = {
     B: "Schedule from PPIC",
     D: "Revised from PPIC",
+    E: "At Supplier",
     F: "Negotiation from Supplier",
     X: "Completed",
   };
@@ -236,6 +244,8 @@ const PurchasingView = (props) => {
   const {
     modalImportCSVShow,
     setModalImportCSVShow,
+    modalExportShow,
+    setModalExportShow,
     modalCreateShow,
     setModalCreateShow,
     modalSplitScheduleShow,
@@ -334,47 +344,73 @@ const PurchasingView = (props) => {
   };
 
   const fetchData = async (params) => {
-    let errMsg;
     setPageLoading(true);
-
     try {
       const responseList = await api.purchasing.list(search, 1000, 1, params);
-
       const rsBodyList = responseList.data.rs_body;
+      const offerData = rsBodyList.offer.filter((offer) => !offer.deleted_at);
+      // const offerDataCheckList = rsBodyList.offer.filter(
+      //   (item) =>
+      //     item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+      //     item.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST &&
+      //     item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+      //     item.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT &&
+      //     item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+      //     item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
+      //     !item.deleted_at,
+      // );
+      setDataSource([...offerData]);
+      if (
+        !filteredInfo.po_number &&
+        !filteredInfo.sku_code &&
+        !filteredInfo.sku_name &&
+        !filteredInfo.supplier_name &&
+        !filteredInfo.buyer_name &&
+        !filteredInfo.io_filter &&
+        !filteredInfo.category_filter
+      ) {
+        setOldDataSource(offerData.map((offer, index) => ({ key: index + 1, ...offer })));
 
-      setOffers(rsBodyList.offer);
-      setTotalData(rsBodyList.total);
-      setOldDataSource(rsBodyList.offer.map((offer, index) => ({ key: index + 1, ...offer })));
-      setDataSource(rsBodyList.offer.map((offer, index) => ({ key: index + 1, ...offer })));
+        setOffers([...offerData]);
+        setTotalData(offerData.length);
 
-      if (rsBodyList.offer && rsBodyList.offer.length > 0) {
-        setPreviewRowChecked(
-          rsBodyList.offer
-            .filter(
-              (item) =>
-                item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
-                item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST,
-            )
-            .map(() => false),
-        );
+        if (offerData.length > 0) {
+          setPreviewRowChecked(rsBodyList.offer.map(() => false));
+          setArrayOfMerge(
+            offerData.map((currRow, index) => {
+              const nextRow = offerData[index + 1];
+              return (
+                nextRow &&
+                currRow.supplier_id === nextRow.supplier_id &&
+                currRow.po_number === nextRow.po_number &&
+                currRow.sku_code === nextRow.sku_code &&
+                currRow.po_qty === nextRow.po_qty &&
+                currRow.flag_status === nextRow.flag_status &&
+                currRow.split_from_id === nextRow.split_from_id
+              );
+            }),
+          );
+          setEditTableMode(false);
+        } else {
+          setPreviewRowChecked([]);
+          setArrayOfMerge([]);
+        }
+      } else {
         setArrayOfMerge(
-          rsBodyList.offer.map((currRow, index) => {
-            const nextRow = rsBodyList.offer[index + 1];
+          offerData.map((currRow, index) => {
+            const nextRow = offerData[index + 1];
             return (
               nextRow &&
               currRow.supplier_id === nextRow.supplier_id &&
               currRow.po_number === nextRow.po_number &&
               currRow.sku_code === nextRow.sku_code &&
               currRow.po_qty === nextRow.po_qty &&
+              currRow.flag_status === nextRow.flag_status &&
               currRow.split_from_id === nextRow.split_from_id
             );
           }),
         );
-
-        setEditTableMode(false);
-      } else {
-        setPreviewRowChecked([]);
-        setArrayOfMerge([]);
+        setPreviewRowChecked(rsBodyList.offer.map(() => false));
       }
     } catch (error) {
       utils.swal.Error({ msg: utils.getErrMsg(error) });
@@ -400,7 +436,6 @@ const PurchasingView = (props) => {
     }
   };
   const handleChange = (pagination, filters, sorter, extra) => {
-    console.log("Various parameters", pagination, filters, sorter);
     setFilteredInfo(filters);
     setSortedInfo(sorter);
     if (
@@ -429,12 +464,13 @@ const PurchasingView = (props) => {
       return i === index ? !isChecked : isChecked;
     });
     if (!initialChecked) {
+      console.log("masuk kategori");
       if (
         status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
         status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
       ) {
         Modal.error({
-          content: "Please fill PO Number first",
+          content: "Please fill the empty column first",
         });
       }
 
@@ -443,6 +479,12 @@ const PurchasingView = (props) => {
           content: "This data is already completed",
         });
       }
+      if (status === constant.FLAG_STATUS_PPIC_REQUEST) {
+        Modal.error({
+          content: "This data is in negotiation process",
+        });
+      }
+      updatedPreviewRowChecked[index] = false;
     }
     setPreviewRowChecked(updatedPreviewRowChecked);
   };
@@ -671,9 +713,9 @@ const PurchasingView = (props) => {
       ...new Set(
         offers.map((item) => {
           if (dataIndex === "supplier_name") {
-            return item.supplier.name;
+            return item?.supplier?.name;
           } else if (dataIndex === "sku_name") {
-            return item.sku_name;
+            return item?.sku_name;
           } else if (dataIndex === "buyer_name") {
             return item?.buyer?.name;
           } else {
@@ -766,7 +808,9 @@ const PurchasingView = (props) => {
           filteredInfo.io_filter ||
           filteredInfo.category_filter ||
           sortedInfo.column ||
-          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE
+          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+          filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+          filterStatus === constant.FLAG_STATUS_SUPPLIER
         ) {
           return;
         }
@@ -803,6 +847,7 @@ const PurchasingView = (props) => {
               );
           }
         };
+
         return (
           <>
             <Checkbox
@@ -818,7 +863,6 @@ const PurchasingView = (props) => {
               onClick={(e) => {
                 e.stopPropagation();
                 setToggleCheckboxTitle(!toggleCheckboxTitle);
-                console.log(previewRowChecked);
               }}
             />
           </>
@@ -827,41 +871,69 @@ const PurchasingView = (props) => {
       dataIndex: "check",
       key: "check",
       width: 25,
-      render: (_, record, index) => {
-        if (editTableMode) return;
-        if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
-        if (filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST) return;
+      render: (_v, record, index) => {
+        const flagStatus = record?.flag_status;
+        console.log(record);
         if (
-          !filterStatus &&
-          (record?.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-            record?.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST)
+          editTableMode ||
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            // constant.FLAG_STATUS_B,
+            // constant.FLAG_STATUS_D,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
         )
           return;
+        if (
+          !filterStatus &&
+          (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+            flagStatus === constant.FLAG_STATUS_PPIC_INIT ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_SUPPLIER)
+        )
+          return;
+
         const isDataComplete = (record) => {
           const poNumber = record?.po_number;
+          const ioFilter = record?.io_filter;
+          const categoryFilter = record?.category_filter;
+          const supplierName = record?.supplier?.name;
           const flagStatus = record?.flag_status;
 
-          return !(utils.isNull(poNumber) || flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE);
+          return (
+            (record.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+              record.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST ||
+              record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+              record.flag_status !== constant.FLAG_STATUS_PPIC_INIT ||
+              record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+              record.flag_status !== constant.FLAG_STATUS_SUPPLIER) &&
+            !(
+              utils.isNull(poNumber) ||
+              utils.isNull(ioFilter) ||
+              utils.isNull(categoryFilter) ||
+              utils.isNull(supplierName) ||
+              flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE
+            )
+          );
         };
+
         const initialChecked = isDataComplete(record);
 
         return (
           <>
-            {record?.po_number !== "" ? (
-              <Checkbox
-                checked={previewRowChecked[index]}
-                style={{ justifyContent: "center", display: "flex" }}
-                onChange={() => {
-                  handleCheckboxChange(index, initialChecked, record?.flag_status);
-                }}
-                onClick={() => {
-                  console.log(previewRowChecked);
-                }}
-              />
-            ) : (
-              // Render something else, or nothing, when po_number is null
-              <Tag color="error">Fill PO</Tag>
-            )}
+            <Checkbox
+              checked={previewRowChecked[index]}
+              style={{ justifyContent: "center", display: "flex" }}
+              onChange={() => {
+                handleCheckboxChange(index, initialChecked, record?.flag_status);
+              }}
+              onClick={() => {}}
+            />
           </>
         );
       },
@@ -930,6 +1002,9 @@ const PurchasingView = (props) => {
       },
       filterSearch: true,
       render: (_, row) => {
+        if (editTableMode) {
+          return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
+        }
         return row?.supplier?.name;
       },
       width: 100,
@@ -1018,7 +1093,7 @@ const PurchasingView = (props) => {
       key: "qty_delivery",
       width: 100,
       render: (_, row) => {
-        return utils.thousandSeparator(row.qty_delivery);
+        return utils.thousandSeparator(row?.qty_delivery);
       },
     },
     {
@@ -1030,7 +1105,35 @@ const PurchasingView = (props) => {
       key: "est_delivery",
       width: 100,
       render: (_, row) => {
-        return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+        return moment(row?.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+      },
+    },
+    {
+      title: t("sendSupplierDate"),
+      dataIndex: "send_supplier_date",
+      sorter: (a, b) => {
+        return moment(a.send_supplier_date) - moment(b.send_supplier_date);
+      },
+      key: "send_supplier_date",
+      width: 100,
+      render: (_, row) => {
+        return row.send_supplier_date
+          ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
+    {
+      title: t("supplierConfirmDate"),
+      dataIndex: "supplier_confirm_date",
+      sorter: (a, b) => {
+        return moment(a.supplier_confirm_date) - moment(b.supplier_confirm_date);
+      },
+      key: "supplier_confirm_date",
+      width: 100,
+      render: (_, row) => {
+        return row.supplier_confirm_date
+          ? moment(row.supplier_confirm_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
       },
     },
 
@@ -1040,7 +1143,7 @@ const PurchasingView = (props) => {
       key: "submitted_qty",
       width: 100,
       render: (_, row) => {
-        return utils.thousandSeparator(row.submitted_qty);
+        return utils.thousandSeparator(row?.submitted_qty);
       },
     },
     {
@@ -1093,12 +1196,14 @@ const PurchasingView = (props) => {
         let btnSplit;
         let btnRetur;
         let tagStatus;
+        let tagHutangKirim;
         let btnAcceptSplit;
         let btnRejectSplit;
         let btnAcceptEdit;
         let btnRejectEdit;
         let btnAcceptClosePO;
         let btnRejectClosePO;
+
         const flagStatus = row.flag_status;
         const renderConfirmationModal = (api, text) => {
           Modal.confirm({
@@ -1132,68 +1237,94 @@ const PurchasingView = (props) => {
             },
           });
         };
-        const renderStatusTag = (color, text) => (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <Tag color={color}>{text}</Tag>
+
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
           </div>
         );
-        if (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
-          return renderStatusTag("success", "Completed");
+        const renderStatusTag = (tagType, tagText) => {
+          const tagHutangKirim2 = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+          const tagStatus2 = renderTag(tagType, tagText);
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {tagHutangKirim2}
+              {tagStatus2}
+            </div>
+          );
+        };
+        tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+        if (row.deleted_at !== null) {
+          tagStatus = renderTag("error", "Deleted");
         }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
+        ) {
+          tagStatus = renderTag("error", "at PPIC");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+          tagStatus = renderTag("error", `at Supplier ${row?.supplier?.name}`);
+        }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.split_from_id !== null
+        ) {
+          tagStatus = renderTag("warning", "Split Request (Supplier to Procurement)");
+        }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.edit_from_id !== null
+        ) {
+          tagStatus = renderTag("warning", "Edit Request (Supplier to Procurement)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.split_from_id !== null) {
+          tagStatus = renderTag("warning", "Split Request (Supplier to PPIC)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.edit_from_id !== null) {
+          tagStatus = renderTag("warning", "Edit Request (Supplier to PPIC)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+          tagStatus = renderTag("success", "Completed");
+        }
+
+        if (editTableMode) return;
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.hutang_kirim &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Close PO Request");
+          tagStatus = renderTag("warning", "Close PO Request");
         }
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.split_from_id !== null &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Split Request");
+          tagStatus = renderTag("warning", "Split Request");
         }
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.edit_from_id !== null &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Edit Request");
+          tagStatus = renderTag("warning", "Edit Request");
         }
-        if (editTableMode) return;
+
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
           flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
         ) {
-          btnEdit = (
-            <Button
-              className="mr-1 mb-1"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalEditData(row.id);
-                setModalEditShow(true);
-              }}
-              style={{ justifyContent: "center", display: "flex" }}
-            >
-              {t("Edit")}
-            </Button>
-          );
-          btnSplit = (
-            <Button
-              className="mr-1 mb-1"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalSplitScheduleData(row);
-                setModalSplitScheduleShow(true);
-              }}
-              style={{ justifyContent: "center", display: "flex" }}
-            >
-              {t("Split")}
-            </Button>
-          );
+          tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
           btnRetur = (
             <Button
               className="mr-1 mb-1"
@@ -1208,18 +1339,12 @@ const PurchasingView = (props) => {
               {t("Retur")}
             </Button>
           );
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              {/* {btnSplit} */}
-              {/* {btnEdit} */}
-              {btnRetur}
-            </div>
-          );
         }
 
         if (row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST && !editTableMode) {
           if (row.split_from_id !== null) {
             tagStatus = <Tag color="warning">Split Request</Tag>;
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             btnAcceptSplit = (
               <Button
                 className="mr-1 mt-2"
@@ -1254,6 +1379,7 @@ const PurchasingView = (props) => {
             );
           } else if (row.edit_from_id !== null) {
             tagStatus = <Tag color="warning">Edit Request</Tag>;
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             btnAcceptEdit = (
               <Button
                 className="mr-1 mt-2"
@@ -1263,11 +1389,11 @@ const PurchasingView = (props) => {
                 onClick={() =>
                   renderConfirmationModal(
                     api.purchasing.acceptEdit,
-                    `Are you sure to accept this close PO request and forward to PPIC?`,
+                    `Are you sure to accept this edit request and forward to PPIC?`,
                   )
                 }
               >
-                {`Accept Close PO`}
+                {`Accept Edit`}
               </Button>
             );
             btnRejectEdit = (
@@ -1287,6 +1413,7 @@ const PurchasingView = (props) => {
               </Button>
             );
           } else if (row.hutang_kirim) {
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             tagStatus = <Tag color="warning">Close PO Request</Tag>;
             btnAcceptClosePO = (
               <Button
@@ -1321,18 +1448,45 @@ const PurchasingView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              {tagStatus}
-              {btnAcceptSplit}
-              {btnRejectSplit}
-              {btnAcceptEdit}
-              {btnRejectEdit}
-              {btnAcceptClosePO}
-              {btnRejectClosePO}
-            </div>
-          );
         }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && !editTableMode) {
+          if (row.split_from_id !== null) {
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Split Request at PPIC
+              </Tag>
+            );
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+          } else if (row.edit_from_id !== null) {
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Edit Request at PPIC
+              </Tag>
+            );
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+          } else if (row.hutang_kirim) {
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Close PO Request at
+              </Tag>
+            );
+          }
+        }
+
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            {tagHutangKirim}
+            {tagStatus}
+            {btnRetur}
+            {btnAcceptSplit}
+            {btnRejectSplit}
+            {btnAcceptEdit}
+            {btnRejectEdit}
+            {btnAcceptClosePO}
+            {btnRejectClosePO}
+          </div>
+        );
       },
     },
   ];
@@ -1360,15 +1514,23 @@ const PurchasingView = (props) => {
     if (!values) {
       return;
     }
+    console.log(values);
     let newFilterValue = {};
     if (values.supplier_list) {
       newFilterValue.supplier_id = values.supplier_list;
     }
-
-    if (values.user_filter?.length > 4) {
-      newFilterValue.user_id = Decrypt(userInfo.user_id);
+    if (values.user_filter) {
+      if (values.user_filter?.length > 4) {
+        newFilterValue.user_id = Decrypt(userInfo.user_id);
+      } else {
+        newFilterValue.user_id = values.user_filter;
+      }
     } else {
-      newFilterValue.user_id = values.user_filter;
+      if (utils.havePermission(userInfo.permissions, "purchasing@admin")) {
+        newFilterValue.user_id = null;
+      } else {
+        newFilterValue.user_id = Decrypt(userInfo.user_id);
+      }
     }
     if (values.io_filter) {
       newFilterValue.io_filter = values.io_filter;
@@ -1622,6 +1784,18 @@ const PurchasingView = (props) => {
         </Link>,
         "offer@create",
       )}
+      btnAction={utils.renderWithPermission(
+        userInfo.permissions,
+        <Button
+          size="small"
+          onClick={() => {
+            setModalExportShow(true);
+          }}
+        >
+          {t("exportXLSX")}
+        </Button>,
+        "purchasing@view",
+      )}
       breadcrumbs={[
         {
           text: t("Procurement"),
@@ -1652,6 +1826,12 @@ const PurchasingView = (props) => {
           fetchSummary(otherParams);
         }}
         data={modalSplitScheduleData}
+      />
+      <ModalExport
+        visible={modalExportShow}
+        onCancel={() => setModalExportShow(false)}
+        data={dataSource}
+        exportType={"purchasing"}
       />
       <ModalCreate
         visible={modalCreateShow}
@@ -1758,7 +1938,7 @@ const PurchasingView = (props) => {
                           status: filterStatus,
                           search_PO: filterValue?.search_PO,
                         };
-                        console.log("triggered4");
+
                         fetchSummary(otherParams);
                       }}
                       allowClear={false}
@@ -1766,18 +1946,22 @@ const PurchasingView = (props) => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="Buyer" name="user_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select Buyer"
-                      optionFilterProp="children"
-                      // onChange={onChangeUserList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={purchasing}
-                      defaultValue={userInfo.user_name}
-                    />
-                  </Form.Item>
+                  {utils.renderWithPermission(
+                    userInfo.permissions,
+                    <Form.Item label="Buyer" name="user_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select Buyer"
+                        optionFilterProp="children"
+                        // onChange={onChangeUserList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={purchasing}
+                        defaultValue={userInfo.user_name}
+                      />
+                    </Form.Item>,
+                    "purchasing@admin",
+                  )}
                 </Col>
                 {/* <Col span={12}>
                   <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">

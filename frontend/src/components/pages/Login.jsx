@@ -70,7 +70,11 @@ function Login(props) {
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 3)) {
       redirectTo = "/procurement/dashboard";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 4)) {
+      redirectTo = "/procurement/dashboard";
+    } else if (utils.redirectRole(utils.getUserInfo().role.id, 5)) {
       redirectTo = "/supplier/dashboard";
+    } else if (utils.redirectRole(utils.getUserInfo().role.id, 6)) {
+      redirectTo = "/ppic/dashboard";
     }
     setLoginAttempts && setLoginAttempts(0);
     window.location = import.meta.env.VITE_WEB_BASE_URL + redirectTo;

@@ -261,8 +261,10 @@ export const TransactionPOList = async (req, res) => {
               literal(`(
                 flag_status IN ('F', 'G') AND
                 (
-                  (flag_status = 'F' AND edit_from_id IS NULL) OR
-                  (flag_status = 'G' AND split_from_id IS NULL)
+                  (flag_status = 'F' AND edit_from_id IS NOT NULL) OR
+                  (flag_status = 'F' AND split_from_id IS NOT NULL) OR
+                  (flag_status = 'G' AND edit_from_id IS NOT NULL) OR
+                  (flag_status = 'G' AND split_from_id IS NOT NULL)
                 )
               )`),
             ],

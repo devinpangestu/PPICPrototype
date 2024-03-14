@@ -4,7 +4,7 @@ import { Op, Sequelize, literal, QueryTypes } from "sequelize";
 export const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
   const getLineNumber = await OpenQueryGetLineNum(poNumber, skuCode);
   const getPOOuts = (po) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT
         SUM(PO_DISTRIBUTIONS_ALL.QUANTITY_ORDERED - PO_DISTRIBUTIONS_ALL.QUANTITY_DELIVERED - PO_DISTRIBUTIONS_ALL.QUANTITY_CANCELLED) "QUANTITY_OUTSTANDING"
         FROM APPS.PO_HEADERS_ALL, APPS.PO_LINES_ALL, APPS.PO_DISTRIBUTIONS_ALL
         WHERE PO_HEADERS_ALL.SEGMENT1 = ''${po}''
@@ -31,7 +31,7 @@ export const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
 
 export const OpenQueryPODetails = async (poNumber, lineNumber, transaction) => {
   const getPODetails = (po, line) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
       SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pap.full_name buyer_name, fu.user_name,
       (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3) kode_sku, msi.description nama_sku
       from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
@@ -71,7 +71,7 @@ export const OpenQueryPODetails = async (poNumber, lineNumber, transaction) => {
 export const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
   const skuSplit = skuCode.split(".");
   const getPODetails = (po, skucode) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1, PLA.LINE_NUM, PLA.QUANTITY, 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1, PLA.LINE_NUM, PLA.QUANTITY, 
       SUM(PDA.QUANTITY_ORDERED-PDA.QUANTITY_DELIVERED-PDA.QUANTITY_CANCELLED) QTY_OUTS,
       PLA.LINE_NUM LINE_NUMBER, MSI.DESCRIPTION NAMA_SKU,FU.USER_NAME BUYER_NAME
       FROM APPS.PO_HEADERS_ALL PHA, APPS.PO_LINES_ALL PLA, APPS.PO_DISTRIBUTIONS_ALL PDA,

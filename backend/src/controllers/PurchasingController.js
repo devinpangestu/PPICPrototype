@@ -13,7 +13,10 @@ import {
   parsingDateToString,
 } from "../utils/parsing.js";
 import { getOutsQtyEachPOSKU } from "../utils/checker.js";
-import { filterDoubleFindCount } from "../utils/filter.js";
+import {
+  filterDeletedDoubleFindCount,
+  filterDoubleFindCount,
+} from "../utils/filter.js";
 import { constant } from "../constant/index.js";
 import moment from "moment";
 import { OpenQueryGetLineNum, OpenQueryPOOuts } from "../utils/openQuery.js";
@@ -24,9 +27,10 @@ export const PurchasingScheduleSummary = async (req, res) => {
       from_date,
       to_date,
       user_id,
+      supplier_id,
       io_filter,
       category_filter,
-      supplier_id,
+      search_PO,
       status,
     } = req.query;
     const userId = getUserID(req);
@@ -38,21 +42,51 @@ export const PurchasingScheduleSummary = async (req, res) => {
       );
     }
     const whereClause = {
-      [Op.and]: [{ deleted_at: null }, { flag_status: ["B", "D", "F", "X"] }],
+      [Op.and]: [
+        { deleted_at: null },
+        { flag_status: ["A", "B", "C", "D", "E", "F", "G", "X"] },
+        { is_edit: false },
+        { is_split: false },
+      ],
+    };
+    const whereClauseDeleted = {
+      [Op.and]: [
+        {
+          deleted_at: { [Op.not]: null },
+        },
+        {
+          submission_date: {
+            [Op.between]: [
+              parsingStringToDateEarly(from_date),
+              parsingStringToDateLate(to_date),
+            ],
+          },
+        },
+      ],
     };
 
     if (user_id) {
+      whereClauseDeleted[Op.and].push({ buyer_id: user_id });
       whereClause[Op.and].push({ buyer_id: user_id });
     }
     if (io_filter) {
+      whereClauseDeleted[Op.and].push({ io_filter });
       whereClause[Op.and].push({ io_filter });
     }
     if (category_filter) {
+      whereClauseDeleted[Op.and].push({ category_filter });
       whereClause[Op.and].push({ category_filter });
     }
 
     if (supplier_id) {
+      whereClauseDeleted[Op.and].push({ supplier_id: supplier_id });
       whereClause[Op.and].push({ supplier_id: supplier_id });
+    }
+    if (search_PO) {
+      whereClauseDeleted[Op.and].push({
+        po_number: { [Op.like]: `%${search_PO}%` },
+      });
+      whereClause[Op.and].push({ po_number: { [Op.like]: `%${search_PO}%` } });
     }
     if (from_date && to_date) {
       whereClause[Op.and].push({
@@ -83,6 +117,12 @@ export const PurchasingScheduleSummary = async (req, res) => {
     }
 
     // Count all records with deleted_at not null
+    const deletedCount = await db.OFFERS.count({
+      where: whereClauseDeleted,
+    });
+    if (deletedCount > 0) {
+      summary.deleted = deletedCount;
+    }
 
     return successResponse(req, res, summary);
   } catch (error) {
@@ -122,22 +162,14 @@ export const PurchasingScheduleList = async (req, res) => {
     }
 
     const whereClause = {
-      [Op.and]: [
-        // { created_by_id: userId }, //cari logic dulu
-        { deleted_at: null },
-      ],
+      [Op.and]: [{ is_edit: false }, { is_split: false }],
     };
     if (status) {
-      whereClause[Op.and].push({ flag_status: status });
-    } else {
-      whereClause[Op.and].push({
-        [Op.or]: [
-          { flag_status: "B" },
-          { flag_status: "D" },
-          { flag_status: "F" },
-          { flag_status: "X" },
-        ],
-      });
+      if (status === "deleted") {
+        whereClause[Op.and].push({ [Op.not]: [{ deleted_at: null }] });
+      } else {
+        whereClause[Op.and].push({ flag_status: status });
+      }
     }
 
     if (from_date && to_date) {
@@ -153,14 +185,17 @@ export const PurchasingScheduleList = async (req, res) => {
     if (supplier_id) {
       whereClause[Op.and].push({ supplier_id: supplier_id });
     }
-    if (user_id) {
-      whereClause[Op.and].push({ buyer_id: user_id });
-    }
     if (io_filter) {
       whereClause[Op.and].push({ io_filter });
     }
     if (category_filter) {
       whereClause[Op.and].push({ category_filter });
+    }
+    if (user_id) {
+      whereClause[Op.and].push({ buyer_id: user_id });
+    }
+    if (searchPO) {
+      whereClause[Op.and].push({ po_number: { [Op.like]: `%${searchPO}%` } });
     }
     const data = await db.OFFERS.findAndCountAll({
       include: [
@@ -172,7 +207,7 @@ export const PurchasingScheduleList = async (req, res) => {
         {
           model: db.USERS,
           as: "buyer",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email", "oracle_username"],
         },
         {
           model: db.SUPPLIERS,
@@ -182,16 +217,24 @@ export const PurchasingScheduleList = async (req, res) => {
       ],
       where: whereClause,
       order: [
-        customOrder("flag_status", ["B", "D", "F", "X"], "ASC"),
+        customOrder(
+          "flag_status",
+          ["B", "D", "A", "C", "E", "F", "G", "X"],
+          "ASC"
+        ),
         ["po_number", "ASC"],
         ["sku_code", "ASC"],
         ["est_delivery", "ASC"],
       ],
     });
-    const { dataFilter, countFilter } = filterDoubleFindCount(data);
+    const { dataFilter, countFilter } =
+      status !== "deleted"
+        ? filterDoubleFindCount(data)
+        : filterDeletedDoubleFindCount(data);
+
     return successResponse(req, res, {
       offer: dataFilter,
-      total: countFilter.length,
+      total: countFilter,
     });
   } catch (error) {
     return errorResponse(req, res, error.message);
@@ -320,28 +363,36 @@ export const PurchasingScheduleCreate = async (req, res) => {
             created_at: new Date(),
             updated_at: new Date(),
           },
-          { dbTransaction }
+          { transaction: dbTransaction }
         );
       }
       return successResponse(req, res, "Success Import Data Jadwal Pengiriman");
     } else {
       //check if name is exist
-      const checkIfDataExist = await db.OFFERS.findOne({
+      const checkIfDataExist = await db.OFFERS.findAll({
         where: {
           submission_date,
           supplier_id: supplier_name, //dicari dulu id nya sesuai
           po_number,
-          po_qty,
-          po_outs,
           sku_code,
           sku_name,
-          qty_delivery,
-          est_delivery,
+          // qty_delivery,
+          // est_delivery,
         },
+        raw: true,
       });
-
       if (checkIfDataExist) {
-        return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
+        const sumQtyDelivery = checkIfDataExist.reduce((total, obj) => {
+          return total + Number(obj.qty_delivery);
+        }, 0);
+
+        if (sumQtyDelivery > po_outs) {
+          return errorResponse(
+            req,
+            res,
+            "Jumlah quantity pengiriman melebihi outstanding quantity, mohon cek kembali"
+          );
+        }
       }
       await db.OFFERS.create(
         {
@@ -359,7 +410,7 @@ export const PurchasingScheduleCreate = async (req, res) => {
           created_at: new Date(),
           updated_at: new Date(),
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
       await dbTransaction.commit();
       return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
@@ -413,7 +464,9 @@ export const PurchasingScheduleSplitPurchasing = async (req, res) => {
         est_delivery: new Date(schedules[key].est_delivery),
         qty_delivery: schedules[key].qty_delivery,
       };
-      await db.OFFERS.create(payloadForSplittedSchedule, { dbTransaction });
+      await db.OFFERS.create(payloadForSplittedSchedule, {
+        transaction: dbTransaction,
+      });
     }
 
     // Delete the original entry
@@ -421,7 +474,7 @@ export const PurchasingScheduleSplitPurchasing = async (req, res) => {
       {
         where: { id: offer_id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
     // Commit the transaction
     await dbTransaction.commit();
@@ -622,7 +675,7 @@ export const PurchasingScheduleEdit = async (req, res) => {
         {
           where: { id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
     //check if name is exist
@@ -683,14 +736,18 @@ export const PurchasingScheduleRetur = async (req, res) => {
       updated_at: new Date(),
     };
 
-    await db.OFFERS.update(payload, { where: { id } }, { dbTransaction });
+    await db.OFFERS.update(
+      payload,
+      { where: { id } },
+      { transaction: dbTransaction }
+    );
     // const payloadDeletedAt = { deleted_at: new Date(), deleted_by_id: userId };
     // await db.OFFERS.update(
     //   payloadDeletedAt,
     //   {
     //     where: { id },
     //   },
-    //   { dbTransaction }
+    //   { transaction: dbTransaction }
     // );
     await dbTransaction.commit();
     return successResponse(req, res, "Success Retur Jadwal Pengiriman ke PPIC");
@@ -726,6 +783,7 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
           flag_status: "E",
           updated_by_id: userId,
           updated_at: new Date(),
+          send_supplier_date: new Date(),
           history: JSON.stringify([
             ...(getExistingHistory || []),
             {
@@ -742,7 +800,7 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
         {
           where: { id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
     return successResponse(
@@ -806,7 +864,7 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
         {
           where: { id: checkAnotherSplit[key].id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
     return successResponse(req, res, "Split Request Accepted");
@@ -867,7 +925,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
       {
         where: { id: checkTheCurrentID.split_from_id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     //delete the splitted data
@@ -876,7 +934,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
         {
           where: { id: checkAnotherSplit[key].id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
     return successResponse(req, res, "Split Request Rejected");
@@ -936,9 +994,9 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
           updated_at: new Date(),
         },
         {
-          where: { id: checkAnotherEditedOffer[key].id, is_edit: true },
+          where: { id: checkAnotherEditedOffer[key].id, is_edit: false },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
 
@@ -975,11 +1033,10 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
       where: {
         po_number: checkTheCurrentID.po_number,
         sku_code: checkTheCurrentID.sku_code,
-        [Op.not]: [{ is_edit: false }],
+        is_edit: false,
         flag_status: "F",
       },
     });
-
     for (let key in checkAnotherEditedOffer) {
       //restore the original data
       await db.OFFERS.update(
@@ -1005,14 +1062,14 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
         {
           where: { id: checkAnotherEditedOffer[key].dataValues.edit_from_id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
       //delete the splitted data
       await db.OFFERS.destroy(
         {
           where: { id: checkAnotherEditedOffer[key].dataValues.id },
         },
-        { dbTransaction }
+        { transaction: dbTransaction }
       );
     }
     return successResponse(req, res, "Split Request Rejected");
@@ -1066,7 +1123,7 @@ export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
       {
         where: { id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     return successResponse(req, res, "Split Request Rejected");
@@ -1121,7 +1178,7 @@ export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
       {
         where: { id },
       },
-      { dbTransaction }
+      { transaction: dbTransaction }
     );
 
     return successResponse(req, res, "Close PO Request Rejected");
