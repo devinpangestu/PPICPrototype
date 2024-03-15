@@ -86,6 +86,16 @@ router.get(
   PPICController.PPICScheduleGetPODetails
 );
 router.get(
+  "/po-input-detail",
+  verifyTokenAndRole("ppic@view"),
+  PPICController.PPICScheduleGetInputPODetails
+);
+router.get(
+  "/pr-input-detail",
+  verifyTokenAndRole("ppic@view"),
+  PPICController.PPICScheduleGetInputPRDetails
+);
+router.get(
   "/:id",
   verifyTokenAndRole("ppic@view"),
   PPICController.PPICScheduleGet

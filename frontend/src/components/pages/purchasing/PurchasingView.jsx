@@ -209,7 +209,20 @@ const PurchasingView = (props) => {
 
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
-      if (record.edit_from_id !== null) {
+      if (
+        record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+        constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+      ) {
+        return (
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
+              constant.FORMAT_DISPLAY_DATETIME,
+            )} ${JSON.parse(record.notes)?.init?.created_by} : ${
+              JSON.parse(record.notes)?.init?.notes
+            }`}
+          </p>
+        );
+      } else if (record.edit_from_id !== null) {
         return (
           <p style={{ margin: 0 }}>
             {`${moment(JSON.parse(record.notes)?.created_at).format(
@@ -817,33 +830,52 @@ const PurchasingView = (props) => {
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
           const poNumber = record?.po_number;
+          const ioFilter = record?.io_filter;
+          const categoryFilter = record?.category_filter;
+          const supplierName = record?.supplier?.name;
           switch (filterStatus) {
             case constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
                 flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber)
+                utils.isNull(poNumber) ||
+                utils.isNull(ioFilter) ||
+                utils.isNull(categoryFilter) ||
+                utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                utils.isNull(poNumber)
+                utils.isNull(poNumber) ||
+                utils.isNull(ioFilter) ||
+                utils.isNull(categoryFilter) ||
+                utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PROCUREMENT_REQUEST:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
                 flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber)
+                utils.isNull(poNumber) ||
+                utils.isNull(ioFilter) ||
+                utils.isNull(categoryFilter) ||
+                utils.isNull(supplierName)
               );
             default:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_INIT ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                utils.isNull(poNumber)
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_SUPPLIER ||
+                utils.isNull(poNumber) ||
+                utils.isNull(ioFilter) ||
+                utils.isNull(categoryFilter) ||
+                utils.isNull(supplierName)
               );
           }
         };

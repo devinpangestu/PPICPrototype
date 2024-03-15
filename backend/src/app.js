@@ -40,7 +40,6 @@ import {
   dailyJobUpdatePOOutstanding,
   dailyJobSupplierRefreshSupplierUser,
 } from "./middlewares/cronjobs.js";
-import rateLimit from "express-rate-limit";
 import { dynamicRateLimit } from "./middlewares/requestHandling.js";
 
 const app = express();

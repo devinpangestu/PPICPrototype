@@ -662,38 +662,7 @@ const PPICView = (props) => {
   useEffect(() => {
     let isMounted = true;
     if (isMounted) {
-      api.ppic
-        .needActionMinDate()
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          setDateRange([moment(rsBody.min_date), moment()]);
-          const otherParams = {
-            from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
-            to_date: moment().format(constant.FORMAT_API_DATE),
-            supplier_id: filterValue?.supplier_id ?? null,
-            user_id:
-              filterValue?.user_id ?? userInfo.role.id !== 6
-                ? Decrypt(userInfo.user_id)
-                : null ?? null,
-            io_filter: filterValue?.io_filter ?? null,
-            category_filter: filterValue?.category_filter ?? null,
-            status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
-            search_PO: filterValue?.search_PO,
-          };
-          fetchSummary(otherParams);
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setFilterValue({
-            user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
-          });
-          form.setFieldsValue({
-            user_filter: userInfo.user_name,
-          });
-          setMinDateLoaded(true);
-        });
+      loadMinDate();
       loadSuppliersOption();
       authorizationCheck(userInfo);
       passwordChangedCheck(userInfo);
@@ -742,6 +711,41 @@ const PPICView = (props) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNumber, minDateLoaded, filterStatus]);
+
+  const loadMinDate = async () => {
+    await api.ppic
+      .needActionMinDate()
+      .then(function (response) {
+        const rsBody = response.data.rs_body;
+        setDateRange([moment(rsBody.min_date), moment()]);
+        const otherParams = {
+          from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
+          to_date: moment().format(constant.FORMAT_API_DATE),
+          supplier_id: filterValue?.supplier_id ?? null,
+          user_id:
+            filterValue?.user_id ?? userInfo.role.id !== 6
+              ? Decrypt(userInfo.user_id)
+              : null ?? null,
+          io_filter: filterValue?.io_filter ?? null,
+          category_filter: filterValue?.category_filter ?? null,
+          status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
+          search_PO: filterValue?.search_PO,
+        };
+        fetchSummary(otherParams);
+      })
+      .catch(function (error) {
+        utils.swal.Error({ msg: utils.getErrMsg(error) });
+      })
+      .finally(function () {
+        setFilterValue({
+          user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
+        });
+        form.setFieldsValue({
+          user_filter: userInfo.user_name,
+        });
+        setMinDateLoaded(true);
+      });
+  };
 
   const loadOffers = async () => {
     let errMsg;
@@ -859,12 +863,17 @@ const PPICView = (props) => {
   // };
   const handleSave = (row) => {
     const keyToCompare = [
+      "io_filter",
+      "category_filter",
       "submission_date",
       "supplier_id",
       "po_number",
       "po_qty",
       "po_outs",
+      "sku_code",
+      "sku_name",
       "qty_delivery",
+      "est_delivery",
     ];
     const newData = [...dataSource];
 
@@ -1189,8 +1198,11 @@ const PPICView = (props) => {
         return record?.supplier?.name.includes(value);
       },
       filterSearch: true,
-      width: 100,
+      width: 150,
       render: (_, row) => {
+        if (editTableMode) {
+          return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
+        }
         return row?.supplier?.name;
       },
     },
@@ -1264,7 +1276,7 @@ const PPICView = (props) => {
       onFilter: (value, record) => record?.sku_name.includes(value),
 
       filterSearch: true,
-      width: 100,
+      width: 150,
       onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
@@ -1500,19 +1512,21 @@ const PPICView = (props) => {
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
         ) {
           tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
-          btnSplit = (
-            <Button
-              className="mr-1 mb-1"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalSplitScheduleData(row);
-                setModalSplitScheduleShow(true);
-              }}
-            >
-              {t("Split")}
-            </Button>
-          );
+          if (row.po_number.substring(0, 2) === "PO" || row.po_number.substring(0, 2) === "PI") {
+            btnSplit = (
+              <Button
+                className="mr-1 mb-1"
+                size="small"
+                type="primary"
+                onClick={() => {
+                  setModalSplitScheduleData(row);
+                  setModalSplitScheduleShow(true);
+                }}
+              >
+                {t("Split")}
+              </Button>
+            );
+          }
 
           btnDelete = (
             <Button
@@ -2124,7 +2138,7 @@ const PPICView = (props) => {
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
-
+          loadMinDate();
           fetchSummary(otherParams);
         }}
       />

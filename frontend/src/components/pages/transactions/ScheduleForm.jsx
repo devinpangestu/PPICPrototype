@@ -162,7 +162,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     } else {
       if (autoFill) {
         const dataToShow = await api.ppic
-          .getPODetail(modalConfirmObj)
+          .getPODetails(modalConfirmObj)
           .then(function (response) {
             modalConfirmObj.submission_date = moment(values.submission_date);
             modalConfirmObj.io_filter = values.io_filter;

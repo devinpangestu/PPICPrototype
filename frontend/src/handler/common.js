@@ -322,10 +322,10 @@ export const getPPICs = (setPageLoading, setPPICs) => {
 };
 export const getPurchasing = (setPageLoading, setPurchasing) => {
   setPageLoading(true);
-  const purchasing_super_user = constant.ROLE_SUPER_ADMIN;
+  // const purchasing_super_user = constant.ROLE_SUPER_ADMIN;
   const purchasing_main = constant.ROLE_PURCHASING;
-  const purchasing_admin_main = constant.ROLE_PURCHASING_ADMIN;
-  const purchasing_ids = [purchasing_super_user, purchasing_main, purchasing_admin_main];
+  // const purchasing_admin_main = constant.ROLE_PURCHASING_ADMIN;
+  const purchasing_ids = [purchasing_main];
   api.users
     .list("", 1000, 1, purchasing_ids)
     .then(function (response) {

@@ -208,13 +208,15 @@ export const ConstructBodyPPIC = async (ws, styles, offers) => {
         sheetOffer
           .cell(row, col)
           .string(`${moment(offersLoop.submission_date).format("DD/MM/YYYY")}`)
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colB
       if (col == 2) {
         sheetOffer
           .cell(row, col)
-          .string(`${offersLoop.supplier.name}`)
+          .string(
+            `${offersLoop?.supplier?.name ? offersLoop?.supplier?.name : ""}`
+          )
           .style(styles.Number.Plain);
       }
       //colC
@@ -265,7 +267,7 @@ export const ConstructBodyPPIC = async (ws, styles, offers) => {
         sheetOffer
           .cell(row, col)
           .string(`${moment(offersLoop.est_delivery).format("DD/MM/YYYY")}`)
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colJ
       if (col == 10) {
@@ -285,7 +287,7 @@ export const ConstructBodyPPIC = async (ws, styles, offers) => {
                 : moment(offersLoop.revised_date).format("DD/MM/YYYY")
             }`
           )
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colL
       if (col == 12) {
@@ -303,7 +305,7 @@ export const ConstructBodyPPIC = async (ws, styles, offers) => {
           .string(
             `${moment(offersLoop.est_submitted_date).format("DD/MM/YYYY")}`
           )
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colM
       if (col == 14) {
@@ -453,7 +455,7 @@ export const ConstructBodyPurchasing = async (ws, styles, offers) => {
         sheetOffer
           .cell(row, col)
           .string(`${moment(offersLoop.submission_date).format("DD/MM/YYYY")}`)
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colB
       if (col == 2) {
@@ -510,7 +512,7 @@ export const ConstructBodyPurchasing = async (ws, styles, offers) => {
         sheetOffer
           .cell(row, col)
           .string(`${moment(offersLoop.est_delivery).format("DD/MM/YYYY")}`)
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colJ
       if (col == 10) {
@@ -530,7 +532,7 @@ export const ConstructBodyPurchasing = async (ws, styles, offers) => {
                 : moment(offersLoop.revised_date).format("DD/MM/YYYY")
             }`
           )
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colL
       if (col == 12) {
@@ -548,7 +550,7 @@ export const ConstructBodyPurchasing = async (ws, styles, offers) => {
           .string(
             `${moment(offersLoop.est_submitted_date).format("DD/MM/YYYY")}`
           )
-          .style(styles.Number.Plain);
+          .style(styles.Date.Plain);
       }
       //colM
       if (col == 14) {

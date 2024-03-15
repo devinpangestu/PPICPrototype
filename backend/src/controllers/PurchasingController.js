@@ -366,6 +366,7 @@ export const PurchasingScheduleCreate = async (req, res) => {
           { transaction: dbTransaction }
         );
       }
+      await dbTransaction.commit();
       return successResponse(req, res, "Success Import Data Jadwal Pengiriman");
     } else {
       //check if name is exist
@@ -422,7 +423,8 @@ export const PurchasingScheduleCreate = async (req, res) => {
 };
 
 export const PurchasingScheduleSplitPurchasing = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
+  const dbTransactionUpdate = await db.sequelize.transaction();
+  const dbTransactionDelete = await db.sequelize.transaction();
   try {
     const offer_id = req.params.id;
     const { schedules } = req.body.rq_body;
@@ -465,8 +467,9 @@ export const PurchasingScheduleSplitPurchasing = async (req, res) => {
         qty_delivery: schedules[key].qty_delivery,
       };
       await db.OFFERS.create(payloadForSplittedSchedule, {
-        transaction: dbTransaction,
+        transaction: dbTransactionUpdate,
       });
+      await dbTransactionUpdate.commit();
     }
 
     // Delete the original entry
@@ -474,14 +477,15 @@ export const PurchasingScheduleSplitPurchasing = async (req, res) => {
       {
         where: { id: offer_id },
       },
-      { transaction: dbTransaction }
+      { transaction: dbTransactionDelete }
     );
     // Commit the transaction
-    await dbTransaction.commit();
+    await dbTransactionDelete.commit();
 
     return successResponse(req, res, "Schedule splitted");
   } catch (error) {
-    await dbTransaction.rollback();
+    await dbTransactionDelete.rollback();
+    await dbTransactionUpdate.rollback();
 
     return errorResponse(req, res, error.message);
   }
@@ -597,7 +601,8 @@ export const PurchasingScheduleEdit = async (req, res) => {
       if (!supplier) {
         //get supplier id
         getSupplierId = await db.SUPPLIERS.findOne({
-          attributes: ["id"],
+          attributes: ["ref_id"],
+          raw: true,
           where: { name: resultLine[0].VENDOR_NAME },
         });
       } else {
@@ -635,6 +640,7 @@ export const PurchasingScheduleEdit = async (req, res) => {
 
       const getExistingHistory = await db.OFFERS.findOne({
         where: { id },
+        raw: true,
         attributes: ["history"],
       });
       const history = JSON.parse(getExistingHistory?.history);
@@ -642,7 +648,7 @@ export const PurchasingScheduleEdit = async (req, res) => {
       await db.OFFERS.update(
         {
           submission_date,
-          supplier_id: supplier ? supplier.ref_id : getSupplierId, //dicari dulu id nya sesuai
+          supplier_id: supplier ? supplier.ref_id : getSupplierId.ref_id, //dicari dulu id nya sesuai
           po_number,
           po_qty: resultLine[0].QUANTITY,
           po_outs: resultLine[0].QTY_OUTS,
@@ -803,6 +809,7 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
     }
+    await dbTransaction.commit();
     return successResponse(
       req,
       res,
@@ -867,6 +874,7 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
     }
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Accepted");
   } catch (error) {
     await dbTransaction.rollback();
@@ -937,6 +945,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
     }
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
@@ -999,7 +1008,7 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
     }
-
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
@@ -1072,6 +1081,7 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
     }
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
@@ -1125,7 +1135,7 @@ export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
       },
       { transaction: dbTransaction }
     );
-
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();
@@ -1180,7 +1190,7 @@ export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
       },
       { transaction: dbTransaction }
     );
-
+    await dbTransaction.commit();
     return successResponse(req, res, "Close PO Request Rejected");
   } catch (error) {
     await dbTransaction.rollback();

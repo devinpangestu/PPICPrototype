@@ -61,6 +61,28 @@ const SupplierView = (props) => {
   const [arrayOfMerge, setArrayOfMerge] = useState([]);
   const [toggleCheckboxTitle, setToggleCheckboxTitle] = useState(true);
 
+  const [expandable, setExpandable] = useState({
+    expandedRowRender: (record) => {
+      if (record.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+        return (
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
+              constant.FORMAT_DISPLAY_DATETIME,
+            )} ${JSON.parse(record.notes)?.init?.created_by} : ${
+              JSON.parse(record.notes)?.init?.notes
+            }`}
+          </p>
+        );
+      }
+    },
+    rowExpandable: (record) => {
+      const checkFlagStatus = (record) =>
+        record.flag_status === constant.FLAG_STATUS_SUPPLIER &&
+        JSON.parse(record.notes)?.init?.notes;
+      return checkFlagStatus(record);
+    },
+  });
+
   useEffect(() => {
     let isMounted = true;
     if (isMounted) {
@@ -143,6 +165,10 @@ const SupplierView = (props) => {
       });
     }
   }
+
+  const tableProps = {
+    expandable,
+  };
   const getCellConfig = (arrayOfMerge, index) => {
     if (arrayOfMerge[index] === false && arrayOfMerge[index - 1] === true) {
       return { rowSpan: 0 };
@@ -370,6 +396,8 @@ const SupplierView = (props) => {
             </Tag>
           </div>
         );
+
+        tagHutangKirim = row?.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
         if (
           row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
           row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
@@ -449,16 +477,15 @@ const SupplierView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              {tagHutangKirim}
-              {btnSplit}
-              {btnClosePO}
-              {btnConfirm}
-            </div>
-          );
         }
-        return;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {tagHutangKirim}
+            {btnSplit}
+            {btnClosePO}
+            {btnConfirm}
+          </div>
+        );
       },
     },
     {
@@ -691,6 +718,7 @@ const SupplierView = (props) => {
             </Button>
           </Space>
           <Table
+            {...tableProps}
             dataSource={dataSource}
             columns={columns}
             pagination={{
