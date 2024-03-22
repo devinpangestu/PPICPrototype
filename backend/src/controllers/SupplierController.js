@@ -6,6 +6,10 @@ import { getOutsQtyEachPOSKU } from "../utils/checker.js";
 import moment from "moment";
 import { constant } from "../constant/index.js";
 import { filterDoubleFind, filterDoubleFindCount } from "../utils/filter.js";
+import sendEmailNotificationSupplierProcEdit from "../utils/emailTemplate/sendEmailNotificationSupplierProcEdit.js";
+import sendEmailNotificationSupplierProcSplit from "../utils/emailTemplate/sendEmailNotificationSupplierProcSplit.js";
+import sendEmailNotificationSupplierProcClosePO from "../utils/emailTemplate/sendEmailNotificationSupplierProcClosePO.js";
+import sendEmailNotificationSupplierConfirm from "../utils/emailTemplate/sendEmailNotificationSupplierConfirm.js";
 
 export const SupplierScheduleList = async (req, res) => {
   try {
@@ -22,7 +26,7 @@ export const SupplierScheduleList = async (req, res) => {
     const whereClause = {
       [Op.and]: [
         { deleted_at: null },
-        { [Op.or]: [{ flag_status: "E" }, { flag_status: "X" }] },
+        { flag_status: ["E", "F", "G", "X"] },
         { is_split: false },
         { is_edit: false },
       ],
@@ -36,12 +40,17 @@ export const SupplierScheduleList = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
         },
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
         },
       ],
       where: whereClause,
@@ -172,12 +181,17 @@ export const SupplierScheduleGetPOQtyAndDate = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
         },
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
         },
       ],
 
@@ -196,6 +210,7 @@ export const SupplierScheduleGetPOQtyAndDate = async (req, res) => {
   }
 };
 
+//ok
 export const SupplierScheduleEdit = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -233,36 +248,34 @@ export const SupplierScheduleEdit = async (req, res) => {
       );
     }
 
+    let buyerEmail = [];
     for (let key in schedules) {
-      console.log(237);
       if (schedules[key].flag_status == "E") {
         //original schedule
-        console.log(239);
         let getExistingNotes = JSON.parse(
           ori_schedules.find((x) => x.id == schedules[key].id)?.notes
         );
-        console.log(243);
         let getExistingHistory = JSON.parse(
           ori_schedules.find((x) => x.id == schedules[key].id)?.history
         );
-        console.log(246);
-        console.log({ ...schedules[key] });
+        let detailSentences = `${moment().format(
+          constant.FORMAT_DISPLAY_DATETIME
+        )} Schedule edited by ${userName} from `;
+        for (let key in ori_schedules) {
+          detailSentences += `${moment(ori_schedules[key].est_delivery).format(
+            constant.FORMAT_DISPLAY_DATE
+          )} with qty ${ori_schedules[key].qty_delivery} `;
+          if (key != ori_schedules.length - 1) {
+            detailSentences += "and ";
+          }
+        }
         await db.OFFERS.update(
           {
             is_edit: true,
             history: JSON.stringify([
               ...(getExistingHistory || []),
               {
-                detail: `${moment().format(
-                  constant.FORMAT_DISPLAY_DATETIME
-                )} Schedule edited by ${userName} from ${moment(
-                  ori_schedules.find((x) => x.id == schedules[key].id)
-                    .est_delivery
-                ).format(constant.FORMAT_DISPLAY_DATE)} to ${
-                  schedules[key].est_delivery
-                } with qty ${moment(schedules[key].qty_delivery).format(
-                  constant.FORMAT_DISPLAY_DATE
-                )}`,
+                detail: detailSentences,
                 created_at: new Date(),
                 created_by: userName,
               },
@@ -275,8 +288,6 @@ export const SupplierScheduleEdit = async (req, res) => {
           },
           { transaction: dbTransaction }
         );
-        console.log(275);
-
         await db.OFFERS.create(
           {
             hutang_kirim: schedules[key].hutang_kirim,
@@ -290,26 +301,18 @@ export const SupplierScheduleEdit = async (req, res) => {
             sku_code: schedules[key].sku_code,
             sku_name: schedules[key].sku_name,
             notes: JSON.stringify({
-              ...(getExistingNotes || []),
+              ...getExistingNotes,
               edit_req: {
-                notes: schedules[key].notes,
+                notes: schedules[key].notesSup,
                 created_by: userName,
                 created_at: new Date(),
               },
             }),
+
             history: JSON.stringify([
               ...(getExistingHistory || []),
               {
-                detail: `${moment().format(
-                  constant.FORMAT_DISPLAY_DATETIME
-                )} Request edit schedule by ${userName} from ${moment(
-                  ori_schedules.find((x) => x.id == schedules[key].id)
-                    .est_delivery
-                ).format(constant.FORMAT_DISPLAY_DATE)} to ${moment(
-                  schedules[key].est_delivery
-                ).format(constant.FORMAT_DISPLAY_DATE)} with qty ${
-                  schedules[key].qty_delivery
-                }`,
+                detail: detailSentences,
                 created_at: new Date(),
                 created_by: userName,
               },
@@ -319,6 +322,7 @@ export const SupplierScheduleEdit = async (req, res) => {
             ),
             qty_delivery: ori_schedules.find((x) => x.id == schedules[key].id)
               ?.qty_delivery,
+            send_supplier_date: new Date(schedules[key].send_supplier_date),
             est_submitted_date: new Date(schedules[key].est_delivery),
             submitted_qty: schedules[key].qty_delivery,
             flag_status: "F",
@@ -332,10 +336,15 @@ export const SupplierScheduleEdit = async (req, res) => {
           },
           { transaction: dbTransaction }
         );
-        console.log(345);
+        buyerEmail.push(schedules[key].buyer?.email);
       }
     }
 
+    await sendEmailNotificationSupplierProcEdit(
+      "BKP - Schedule Edit Request ",
+      `New Schedule Edit Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(buyerEmail)]
+    );
     await dbTransaction.commit();
     return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
   } catch (error) {
@@ -344,6 +353,7 @@ export const SupplierScheduleEdit = async (req, res) => {
   }
 };
 
+//ok
 export const SupplierScheduleSplitSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -361,6 +371,19 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
     }
     const offerToSplitted = await db.OFFERS.findOne({
       where: { id: offer_id, deleted_at: null },
+      include: [
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
+        },
+        {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+      ],
+
       attributes: {
         exclude: ["id"],
       },
@@ -400,9 +423,11 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
 
     const getExistingNotes = JSON.parse(offerToSplitted.notes);
     const getExistingHistory = JSON.parse(offerToSplitted.history);
+    let buyerEmail = [];
+    let payloadForSplittedSchedule = {};
     for (let key in schedules) {
       //create
-      let payloadForSplittedSchedule;
+
       if (schedules[key].split_from_id == null) {
         payloadForSplittedSchedule = {
           ...offerToSplitted.dataValues,
@@ -467,6 +492,7 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
           flag_status: "F",
         };
       }
+      buyerEmail.push(offerToSplitted.buyer?.email);
       await db.OFFERS.create(payloadForSplittedSchedule, {
         transaction: dbTransaction,
       });
@@ -496,7 +522,11 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
       },
       { transaction: dbTransaction }
     );
-
+    await sendEmailNotificationSupplierProcSplit(
+      "BKP - Schedule Split Request",
+      `New Schedule Split Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(buyerEmail)]
+    );
     await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule splitted");
@@ -507,6 +537,7 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
   }
 };
 
+//ok
 export const SupplierScheduleClosePOSupplier = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -523,6 +554,18 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
     }
     const offerToSplitted = await db.OFFERS.findOne({
       where: { id, deleted_at: null },
+      include: [
+        {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
+        },
+      ],
       attributes: {
         exclude: ["id"],
       },
@@ -532,6 +575,7 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
     const getExistingHistory = JSON.parse(offerToSplitted.history);
 
     //update original schedule
+    let buyerEmail = [];
     const payloadForOriginalSchedule = {
       ...offerToSplitted.dataValues,
       history: JSON.stringify([
@@ -550,6 +594,7 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
       ]),
       flag_status: "F",
     };
+    buyerEmail.push(offerToSplitted.buyer?.email);
     await db.OFFERS.update(
       payloadForOriginalSchedule,
       {
@@ -558,6 +603,11 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
       { transaction: dbTransaction }
     );
 
+    await sendEmailNotificationSupplierProcClosePO(
+      "BKP - Schedule Close PO Request",
+      `New Schedule Close PO Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(buyerEmail)]
+    );
     await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule go to close PO");
@@ -568,6 +618,7 @@ export const SupplierScheduleClosePOSupplier = async (req, res) => {
   }
 };
 
+//ok
 export const SupplierScheduleConfirm = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -582,12 +633,25 @@ export const SupplierScheduleConfirm = async (req, res) => {
         "User belum terautentikasi, silahkan login kembali"
       );
     }
+    let buyerEmail = [];
     if (mass == "true") {
       //find the flag_status E and is_split false
       const getData = await db.OFFERS.findOne({
         where: {
           id,
         },
+        include: [
+          {
+            model: db.USERS,
+            as: "crtd_by",
+            attributes: ["id", "name", "email"],
+          },
+          {
+            model: db.USERS,
+            as: "buyer",
+            attributes: ["id", "name", "email", "oracle_username"],
+          },
+        ],
       });
       const getAnotherIfExist = await db.OFFERS.findAll({
         where: {
@@ -597,6 +661,18 @@ export const SupplierScheduleConfirm = async (req, res) => {
           flag_status: "E",
           is_split: false,
         },
+        include: [
+          {
+            model: db.USERS,
+            as: "crtd_by",
+            attributes: ["id", "name", "email"],
+          },
+          {
+            model: db.USERS,
+            as: "buyer",
+            attributes: ["id", "name", "email", "oracle_username"],
+          },
+        ],
       });
 
       for (let key in getAnotherIfExist) {
@@ -624,10 +700,29 @@ export const SupplierScheduleConfirm = async (req, res) => {
           },
           { transaction: dbTransaction }
         );
+        buyerEmail.push(getAnotherIfExist[key].buyer?.email);
+        buyerEmail.push(getAnotherIfExist[key].crtd_by?.email);
       }
+      await sendEmailNotificationSupplierConfirm(
+        "BKP - Konfirmasi Jadwal Pengiriman Barang",
+        `Some Schedule has been confirmed by Supplier ${userName}, please check to your account`,
+        [...new Set(buyerEmail)]
+      );
     } else {
       const qtyData = await db.OFFERS.findOne({
         where: { id, deleted_at: null },
+        include: [
+          {
+            model: db.USERS,
+            as: "crtd_by",
+            attributes: ["id", "name", "email"],
+          },
+          {
+            model: db.USERS,
+            as: "buyer",
+            attributes: ["id", "name", "email", "oracle_username"],
+          },
+        ],
       });
 
       await db.OFFERS.update(
@@ -654,6 +749,13 @@ export const SupplierScheduleConfirm = async (req, res) => {
         },
         { transaction: dbTransaction }
       );
+      buyerEmail.push(qtyData.dataValues.buyer?.email);
+      buyerEmail.push(qtyData.dataValues.crtd_by?.email);
+      await sendEmailNotificationSupplierConfirm(
+        "BKP - Konfirmasi Jadwal Pengiriman Barang",
+        `Some Schedule has been confirmed by Supplier ${userName}, please check to your account`,
+        [...new Set(buyerEmail)]
+      );
     }
 
     await dbTransaction.commit();
@@ -664,6 +766,7 @@ export const SupplierScheduleConfirm = async (req, res) => {
   }
 };
 
+//ok
 export const SupplierScheduleConfirmSelectedData = async (req, res) => {
   const dbTransaction = await db.sequelize.transaction();
   try {
@@ -677,7 +780,9 @@ export const SupplierScheduleConfirmSelectedData = async (req, res) => {
         "User belum terautentikasi, silahkan login kembali"
       );
     }
+    let buyerEmail = [];
     for (let key in schedules) {
+      console.log(schedules[key]);
       await db.OFFERS.update(
         {
           submitted_qty: schedules[key].qty_delivery,
@@ -703,8 +808,14 @@ export const SupplierScheduleConfirmSelectedData = async (req, res) => {
         },
         { transaction: dbTransaction }
       );
+      buyerEmail.push(schedules[key].buyer?.email);
+      buyerEmail.push(schedules[key].crtd_by?.email);
     }
-
+    await sendEmailNotificationSupplierConfirm(
+      "BKP - Konfirmasi Jadwal Pengiriman Barang",
+      `Some Schedule has been confirmed by Supplier ${userName}, please check to your account`,
+      [...new Set(buyerEmail)]
+    );
     await dbTransaction.commit();
     return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
   } catch (error) {

@@ -24,9 +24,8 @@ import UserView from "components/pages/admin/users/UserView";
 import NotFoundPage from "NotFoundPage";
 import SuppliersDataView from "components/pages/ppic/suppliers/SuppliersDataView";
 import utils from "utils";
-
+const userInfo = utils.getUserInfo();
 function NoMatch() {
-  const userInfo = utils.getUserInfo();
   const [timeLeft, setTimeLeft] = useState(3);
 
   useEffect(() => {
@@ -125,7 +124,8 @@ const ppicRoutes = [
   {
     path: "/history",
     component: TransactionHistoryView,
-    permissions: ppicPermission,
+    permissions:
+      userInfo?.role?.id === 1 || userInfo?.role?.id === 2 ? ppicPermission : purchasingPermission,
   },
 ];
 
@@ -146,7 +146,8 @@ const purchasingRoutes = [
   {
     path: "/history",
     component: TransactionHistoryView,
-    permissions: purchasingPermission,
+    permissions:
+      userInfo?.role?.id === 3 || userInfo?.role?.id === 4 ? purchasingPermission : ppicPermission,
   },
 ];
 
@@ -157,6 +158,7 @@ const qaqcRoutes = [
     permissions: ppicPermission,
   },
 ];
+
 export const routes = [
   {
     path: "/login",
@@ -172,9 +174,9 @@ export const routes = [
   // { path: "/maintenance", component: MaintenancePage, public: true },
   // { path: "/deprecated", component: DeprecatedPage, public: true },
   // { path: "/restricted", component: RestrictedPage, public: true },
-  ...supplierRoutes,
-  ...purchasingRoutes,
   ...ppicRoutes,
+  ...purchasingRoutes,
+  ...supplierRoutes,
   ...qaqcRoutes,
   ...adminRoutes,
   {

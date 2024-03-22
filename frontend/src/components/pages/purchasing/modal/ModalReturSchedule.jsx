@@ -54,7 +54,6 @@ const ModalCreate = ({ visible, onCancel, onSuccess, data }) => {
           label={t("notes")}
           rules={[
             {
-              required: true,
               message: `${t("input")} ${t("notes")}`,
             },
             { type: "string", min: 6, message: t("Notes must be at least 6 characters") },

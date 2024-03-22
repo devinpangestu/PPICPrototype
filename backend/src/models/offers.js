@@ -22,6 +22,7 @@ export default (sequelize, DataTypes) => {
         foreignKey: "created_by_id",
         as: "crtd_by",
       });
+
       this.belongsTo(models.USERS, {
         foreignKey: "updated_by_id",
         as: "updtd_by",
@@ -35,6 +36,13 @@ export default (sequelize, DataTypes) => {
           name: "ref_id",
         },
         as: "supplier",
+        sourceKey: "supplier_id",
+      });
+      this.hasOne(models.USERS, {
+        foreignKey: {
+          name: "supplier_id",
+        },
+        as: "user_supplier",
         sourceKey: "supplier_id",
       });
     }
@@ -149,6 +157,14 @@ export default (sequelize, DataTypes) => {
       updated_at: { defaultValue: null, type: DataTypes.DATE },
       deleted_by_id: { defaultValue: null, type: DataTypes.NUMERIC },
       deleted_at: { defaultValue: null, type: DataTypes.DATE },
+      po_outs_history: {
+        defaultValue: JSON.stringify([]),
+        type: DataTypes.TEXT,
+      },
+      po_outs_changes: {
+        defaultValue: JSON.stringify([]),
+        type: DataTypes.TEXT,
+      },
     },
     {
       sequelize,

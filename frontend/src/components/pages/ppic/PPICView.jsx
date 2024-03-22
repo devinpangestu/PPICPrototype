@@ -20,6 +20,7 @@ import {
   Tag,
   Input,
   Card,
+  Tooltip,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -592,7 +593,6 @@ const PPICView = (props) => {
 
   const handleChange = (pagination, filters, sorter, extra) => {
     setFilteredInfo(filters);
-    console.log(filters);
     setSortedInfo(sorter);
 
     setPreviewRowChecked(extra.currentDataSource.map(() => false));
@@ -757,7 +757,6 @@ const PPICView = (props) => {
     };
 
     if (filterStatus !== "deleted") {
-      console.log(filterStatus);
       if (filterStatus) otherParams.status = userInfo.role.id !== 6 ? filterStatus : "X";
       if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
       if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
@@ -1006,13 +1005,14 @@ const PPICView = (props) => {
         )
           return;
         if (
-          filteredInfo.po_number ||
-          filteredInfo.sku_code ||
-          filteredInfo.sku_name ||
-          filteredInfo.supplier_name ||
-          filteredInfo.buyer_name ||
-          filteredInfo.io_filter ||
-          filteredInfo.category_filter ||
+          // filteredInfo.po_number ||
+          // filteredInfo.sku_code ||
+          // filteredInfo.sku_name ||
+          // filteredInfo.supplier_name ||
+          // filteredInfo.buyer_name ||
+          // filteredInfo.io_filter ||
+          // filteredInfo.category_filter
+          // ||
           sortedInfo.column
         )
           return;
@@ -1180,10 +1180,20 @@ const PPICView = (props) => {
         : (a, b) => {
             return moment(a.submission_date) - moment(b.submission_date);
           },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
+      ellipsis: {
+        showTitle: false,
+      },
       render: (_, row) => {
-        return moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE);
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE)}
+          >
+            {moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE)}
+          </Tooltip>
+        );
       },
     },
     {
@@ -1191,19 +1201,32 @@ const PPICView = (props) => {
       dataIndex: "supplier_name",
       key: "supplier_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("supplier_name"),
       filteredValue: filteredInfo?.supplier_name || null,
       onFilter: (value, record) => {
         return record?.supplier?.name.includes(value);
       },
       filterSearch: true,
-      width: 150,
+      width: 250,
+      // ellipsis: {
+      //   showTitle: false,
+      // },
       render: (_, row) => {
         if (editTableMode) {
           return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
         }
-        return row?.supplier?.name;
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={
+              row?.supplier?.name + " " + (row?.user_supplier?.email ? "" : "Email not registered")
+            }
+          >
+            {row?.supplier?.name} <br />
+            {row?.user_supplier?.email ? "" : <b>Email not registered</b>}
+          </Tooltip>
+        );
       },
     },
     {
@@ -1211,14 +1234,14 @@ const PPICView = (props) => {
       dataIndex: "po_number",
       key: "po_number",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("po_number"),
       filteredValue: filteredInfo.po_number || null,
       onFilter: (value, record) => {
         return value === "" ? record?.po_number === "" : record?.po_number.includes(value);
       },
       filterSearch: true,
-      width: "10vw",
+      width: 110,
       render: (_, row) => {
         if (editTableMode) {
           return row?.po_number || <Tag color="red">Please Fill PO Number</Tag>;
@@ -1236,7 +1259,7 @@ const PPICView = (props) => {
         : (a, b) => {
             return moment(a.po_qty) - moment(b.po_qty);
           },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row?.po_qty);
@@ -1248,7 +1271,7 @@ const PPICView = (props) => {
       key: "po_outs",
       editable: editTableMode,
       sorter: editTableMode ? false : (a, b) => a.po_outs - b.po_outs,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row?.po_outs);
@@ -1264,7 +1287,17 @@ const PPICView = (props) => {
       onFilter: (value, record) => record?.sku_code.includes(value),
       width: 150,
       filterSearch: true,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_code}>
+            {row?.sku_code}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("SKUName"),
@@ -1277,7 +1310,17 @@ const PPICView = (props) => {
 
       filterSearch: true,
       width: 150,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_name}>
+            {row?.sku_name}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("qtyDelivery"),
@@ -1378,7 +1421,7 @@ const PPICView = (props) => {
       dataIndex: "buyer_name",
       key: "buyer_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("buyer_name"),
       filteredValue: filteredInfo?.buyer_name || null,
       onFilter: (value, record) => {
@@ -1512,21 +1555,20 @@ const PPICView = (props) => {
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
         ) {
           tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
-          if (row.po_number.substring(0, 2) === "PO" || row.po_number.substring(0, 2) === "PI") {
-            btnSplit = (
-              <Button
-                className="mr-1 mb-1"
-                size="small"
-                type="primary"
-                onClick={() => {
-                  setModalSplitScheduleData(row);
-                  setModalSplitScheduleShow(true);
-                }}
-              >
-                {t("Split")}
-              </Button>
-            );
-          }
+
+          btnSplit = (
+            <Button
+              className="mr-1 mb-1"
+              size="small"
+              type="primary"
+              onClick={() => {
+                setModalSplitScheduleData(row);
+                setModalSplitScheduleShow(true);
+              }}
+            >
+              {t("Split")}
+            </Button>
+          );
 
           btnDelete = (
             <Button
@@ -2222,103 +2264,106 @@ const PPICView = (props) => {
 
       <SyncOverlay loading={pageLoading} />
       <Row gutter={16}>
-        <Col xs={24} lg={24} xl={24}>
-          <Card size="small">
-            <SectionHeading title={"Filter"} withDivider />
-            <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
-              <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item
-                    label="Date Range"
-                    className="mb-2"
-                    name="date"
-                    wrapperCol={{ flex: "auto" }}
-                  >
-                    <DatePicker.RangePicker
-                      defaultValue={dateRange}
-                      value={dateRange}
-                      style={{ width: "100%" }}
-                      {...utils.FORM_RANGEPICKER_PROPS}
-                      onChange={(dates, dateStrings) => {
-                        setDateRange(dates);
-                        const otherParams = {
-                          from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
-                          to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
-                          supplier_id: filterValue?.supplier_id ?? null,
-                          user_id: filterValue?.user_id ?? null,
-                          io_filter: filterValue?.io_filter ?? null,
-                          category_filter: filterValue?.category_filter ?? null,
-                          status: filterStatus,
-                          search_PO: filterValue?.search_PO,
-                        };
+        {userInfo.role.id === 1 && (
+          <Col xs={24} lg={24} xl={24}>
+            <Card size="small">
+              <SectionHeading title={"Filter"} withDivider />
+              <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="Date Range"
+                      className="mb-2"
+                      name="date"
+                      wrapperCol={{ flex: "auto" }}
+                    >
+                      <DatePicker.RangePicker
+                        defaultValue={dateRange}
+                        value={dateRange}
+                        style={{ width: "100%" }}
+                        {...utils.FORM_RANGEPICKER_PROPS}
+                        onChange={(dates, dateStrings) => {
+                          setDateRange(dates);
+                          const otherParams = {
+                            from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
+                            to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
+                            supplier_id: filterValue?.supplier_id ?? null,
+                            user_id: filterValue?.user_id ?? null,
+                            io_filter: filterValue?.io_filter ?? null,
+                            category_filter: filterValue?.category_filter ?? null,
+                            status: filterStatus,
+                            search_PO: filterValue?.search_PO,
+                          };
 
-                        fetchSummary(otherParams);
-                      }}
-                      allowClear={false}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="User" name="user_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select User"
-                      optionFilterProp="children"
-                      // onChange={onChangeUserList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={PPICs}
-                      defaultValue={userInfo.user_name}
-                    />
-                  </Form.Item>
-                </Col>
-                {/* <Col span={12}>
+                          fetchSummary(otherParams);
+                        }}
+                        allowClear={false}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="User" name="user_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select User"
+                        optionFilterProp="children"
+                        // onChange={onChangeUserList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={PPICs}
+                        defaultValue={userInfo.user_name}
+                      />
+                    </Form.Item>
+                  </Col>
+                  {/* <Col span={12}>
                   <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">
                     <Input placeholder={t("searchPO")} />
                   </Form.Item>
                 </Col> */}
-              </Row>
-              <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select I/O"
-                      optionFilterProp="children"
-                      // onChange={onChangeSupplierList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={constant.WAREHOUSE_LIST}
-                      defaultValue={null}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="Category" name="category_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select Category"
-                      optionFilterProp="children"
-                      // onChange={onChangeSupplierList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={constant.PPIC_CATEGORY_LIST}
-                      defaultValue={null}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item className="mb-2">
-                <Button type="primary" htmlType="submit">
-                  {t("applyFilter")}
-                </Button>{" "}
-                <Button type="" onClick={onResetFilter}>
-                  Reset Filter
-                </Button>
-              </Form.Item>
-            </Form>
-          </Card>
-        </Col>
+                </Row>
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select I/O"
+                        optionFilterProp="children"
+                        // onChange={onChangeSupplierList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={constant.WAREHOUSE_LIST}
+                        defaultValue={null}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Category" name="category_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select Category"
+                        optionFilterProp="children"
+                        // onChange={onChangeSupplierList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={constant.PPIC_CATEGORY_LIST}
+                        defaultValue={null}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item className="mb-2">
+                  <Button type="primary" htmlType="submit">
+                    {t("applyFilter")}
+                  </Button>{" "}
+                  <Button type="" onClick={onResetFilter}>
+                    Reset Filter
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Card>
+          </Col>
+        )}
+
         <Col xs={24} lg={24} xl={24}>
           <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
             {tabPanes}

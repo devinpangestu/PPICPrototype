@@ -746,7 +746,12 @@ export const PPICSupplierTransactions = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
         },
       ],
     });

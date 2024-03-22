@@ -11,7 +11,6 @@ function ModalExport(props) {
   const [t] = useTranslation();
   const [form] = Form.useForm();
   const { visible, onCancel, exportType, data } = props;
-  console.log(data);
   const [processingExport, setProcessingExport] = useState(false);
 
   const handleOnSubmit = (values) => {

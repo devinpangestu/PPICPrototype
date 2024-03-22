@@ -22,6 +22,7 @@ import {
   Space,
   Table,
   Card,
+  Tooltip,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -211,7 +212,7 @@ const PurchasingView = (props) => {
     expandedRowRender: (record) => {
       if (
         record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-        constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+        record.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
       ) {
         return (
           <p style={{ margin: 0, fontSize: "1rem" }}>
@@ -227,7 +228,7 @@ const PurchasingView = (props) => {
           <p style={{ margin: 0 }}>
             {`${moment(JSON.parse(record.notes)?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.created_by} : ${
+            )} ${JSON.parse(record.notes)?.edit_req?.created_by} : ${
               JSON.parse(record.notes)?.edit_req?.notes
             }`}
           </p>
@@ -242,14 +243,17 @@ const PurchasingView = (props) => {
             } `}
           </p>
         );
-      } else {
-        return null;
       }
     },
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
-        record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
-        (JSON.parse(record.notes)?.edit_req?.notes || JSON.parse(record.notes)?.split_req?.notes);
+        (record.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+          record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+          record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST) &&
+        (JSON.parse(record.notes)?.init?.notes ||
+          JSON.parse(record.notes)?.retur?.notes ||
+          JSON.parse(record.notes)?.edit_req?.notes ||
+          JSON.parse(record.notes)?.split_req?.notes);
       return checkFlagStatus(record);
     },
   });
@@ -451,6 +455,8 @@ const PurchasingView = (props) => {
   const handleChange = (pagination, filters, sorter, extra) => {
     setFilteredInfo(filters);
     setSortedInfo(sorter);
+    setPreviewRowChecked(extra.currentDataSource.map(() => false));
+    setToggleCheckboxTitle(false);
     if (
       !filteredInfo.po_number &&
       !filteredInfo.sku_code &&
@@ -460,9 +466,9 @@ const PurchasingView = (props) => {
       !filteredInfo.io_filter &&
       !filteredInfo.category_filter
     ) {
-      setDataSource(extra.currentDataSource);
-    } else {
       setDataSource(oldDataSource);
+    } else {
+      setDataSource(extra.currentDataSource);
     }
   };
   const loadSuppliersOption = async () => {
@@ -477,7 +483,6 @@ const PurchasingView = (props) => {
       return i === index ? !isChecked : isChecked;
     });
     if (!initialChecked) {
-      console.log("masuk kategori");
       if (
         status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
         status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
@@ -535,35 +540,7 @@ const PurchasingView = (props) => {
   useEffect(() => {
     let isMounted = true;
     if (isMounted) {
-      api.purchasing
-        .needActionMinDate()
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          setDateRange([moment(rsBody.min_date), moment()]);
-          const otherParams = {
-            from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
-            to_date: moment().format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: filterValue?.user_id ?? Decrypt(userInfo.user_id) ?? null,
-            io_filter: filterValue?.io_filter ?? null,
-            category_filter: filterValue?.category_filter ?? null,
-            status: filterStatus,
-          };
-          fetchSummary(otherParams);
-          fetchData(otherParams);
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setFilterValue({
-            user_id: Decrypt(userInfo.user_id),
-          });
-          form.setFieldsValue({
-            user_filter: userInfo.user_name,
-          });
-          setMinDateLoaded(true);
-        });
+      loadMinDate();
       loadSuppliersOption();
       authorizationCheck(userInfo);
       passwordChangedCheck(userInfo);
@@ -619,6 +596,41 @@ const PurchasingView = (props) => {
   //   loadOffers();
   //   fetchSummary(filterValue);
   // }, [filterStatus]);
+  const loadMinDate = async () => {
+    await api.purchasing
+      .needActionMinDate()
+      .then(function (response) {
+        const rsBody = response.data.rs_body;
+        setDateRange([moment(rsBody.min_date), moment()]);
+        const otherParams = {
+          from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
+          to_date: moment().format(constant.FORMAT_API_DATE),
+          supplier_id: filterValue?.supplier_id ?? null,
+          user_id:
+            filterValue?.user_id ?? userInfo.role.id !== 6
+              ? Decrypt(userInfo.user_id)
+              : null ?? null,
+          io_filter: filterValue?.io_filter ?? null,
+          category_filter: filterValue?.category_filter ?? null,
+          status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
+          search_PO: filterValue?.search_PO,
+        };
+        fetchSummary(otherParams);
+      })
+      .catch(function (error) {
+        utils.swal.Error({ msg: utils.getErrMsg(error) });
+      })
+      .finally(function () {
+        setFilterValue({
+          user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
+        });
+        form.setFieldsValue({
+          user_filter: userInfo.user_name,
+        });
+        setMinDateLoaded(true);
+      });
+  };
+
   const loadOffers = async () => {
     let errMsg;
 
@@ -814,55 +826,64 @@ const PurchasingView = (props) => {
       title: (_, record, index) => {
         if (
           editTableMode ||
-          filteredInfo.po_number ||
-          filteredInfo.sku_code ||
-          filteredInfo.sku_name ||
-          filteredInfo.supplier_name ||
-          filteredInfo.io_filter ||
-          filteredInfo.category_filter ||
-          sortedInfo.column ||
-          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-          filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-          filterStatus === constant.FLAG_STATUS_SUPPLIER
-        ) {
-          return;
-        }
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            constant.FLAG_STATUS_PPIC_INIT,
+            constant.FLAG_STATUS_PROCUREMENT_RETUR,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
+        )
+          if (
+            // filteredInfo.po_number ||
+            // filteredInfo.sku_code ||
+            // filteredInfo.sku_name ||
+            // filteredInfo.supplier_name ||
+            // filteredInfo.io_filter ||
+            // filteredInfo.category_filter ||
+            sortedInfo.column ||
+            filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            filterStatus === constant.FLAG_STATUS_SUPPLIER
+          ) {
+            return;
+          }
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
-          const poNumber = record?.po_number;
-          const ioFilter = record?.io_filter;
-          const categoryFilter = record?.category_filter;
-          const supplierName = record?.supplier?.name;
           switch (filterStatus) {
             case constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC:
               return !(
-                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber) ||
-                utils.isNull(ioFilter) ||
-                utils.isNull(categoryFilter) ||
-                utils.isNull(supplierName)
+                (
+                  flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                  flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+                )
+                // ||
+                // utils.isNull(poNumber) ||
+                // utils.isNull(ioFilter) ||
+                // utils.isNull(categoryFilter) ||
+                // utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT:
               return !(
-                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                utils.isNull(poNumber) ||
-                utils.isNull(ioFilter) ||
-                utils.isNull(categoryFilter) ||
-                utils.isNull(supplierName)
+                (
+                  flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC
+                )
+                // ||
+                // utils.isNull(poNumber) ||
+                // utils.isNull(ioFilter) ||
+                // utils.isNull(categoryFilter) ||
+                // utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PROCUREMENT_REQUEST:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber) ||
-                utils.isNull(ioFilter) ||
-                utils.isNull(categoryFilter) ||
-                utils.isNull(supplierName)
+                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
               );
             default:
               return !(
@@ -871,11 +892,7 @@ const PurchasingView = (props) => {
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
                 flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
-                flagStatus === constant.FLAG_STATUS_SUPPLIER ||
-                utils.isNull(poNumber) ||
-                utils.isNull(ioFilter) ||
-                utils.isNull(categoryFilter) ||
-                utils.isNull(supplierName)
+                flagStatus === constant.FLAG_STATUS_SUPPLIER
               );
           }
         };
@@ -888,7 +905,8 @@ const PurchasingView = (props) => {
               onChange={(e) => {
                 const isChecked = e.target.checked;
                 const updatedPreviewRowChecked = previewRowChecked.map(
-                  (_, i) => isChecked && isDataComplete(offers[i]) && toggleCheckboxTitle,
+                  (_, i) =>
+                    dataSource && isChecked && isDataComplete(dataSource[i]) && toggleCheckboxTitle,
                 );
                 setPreviewRowChecked(updatedPreviewRowChecked);
               }}
@@ -905,7 +923,6 @@ const PurchasingView = (props) => {
       width: 25,
       render: (_v, record, index) => {
         const flagStatus = record?.flag_status;
-        console.log(record);
         if (
           editTableMode ||
           [
@@ -975,7 +992,7 @@ const PurchasingView = (props) => {
       dataIndex: "io_filter",
       key: "io_filter",
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("io_filter"),
       filteredValue: filteredInfo?.io_filter || null,
       onFilter: (value, record) => {
@@ -995,7 +1012,7 @@ const PurchasingView = (props) => {
       dataIndex: "category_filter",
       key: "category_filter",
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("category_filter"),
       filteredValue: filteredInfo?.category_filter || null,
       onFilter: (value, record) => {
@@ -1017,7 +1034,7 @@ const PurchasingView = (props) => {
       sorter: (a, b) => {
         return moment(a.submission_date) - moment(b.submission_date);
       },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE);
@@ -1033,22 +1050,33 @@ const PurchasingView = (props) => {
         return record?.supplier?.name.includes(value);
       },
       filterSearch: true,
+
       render: (_, row) => {
         if (editTableMode) {
           return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
         }
-        return row?.supplier?.name;
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={
+              row?.supplier?.name + " " + (row?.user_supplier?.email ? "" : "Email not registered")
+            }
+          >
+            {row?.supplier?.name} <br />
+            {row?.user_supplier?.email ? "" : <b>Email not registered</b>}
+          </Tooltip>
+        );
       },
-      width: 100,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      width: 250,
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("No PR/PO"),
       dataIndex: "po_number",
       key: "po_number",
-      width: "10vw",
+      width: 110,
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       filters: filterColumnOpt("po_number"),
       filteredValue: filteredInfo.po_number || null,
@@ -1072,7 +1100,7 @@ const PurchasingView = (props) => {
       sorter: (a, b) => {
         return moment(a.po_qty) - moment(b.po_qty);
       },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         const poQty = utils.thousandSeparator(row.po_qty);
@@ -1087,7 +1115,7 @@ const PurchasingView = (props) => {
         return moment(a.po_outs) - moment(b.po_outs);
       },
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row.po_outs);
@@ -1103,7 +1131,17 @@ const PurchasingView = (props) => {
       onFilter: (value, record) => record?.sku_code.includes(value),
       filterSearch: true,
       width: 150,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_code}>
+            {row?.sku_code}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("SKUName"),
@@ -1114,7 +1152,17 @@ const PurchasingView = (props) => {
       onFilter: (value, record) => record?.sku_name.includes(value),
       filterSearch: true,
       width: 100,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_name}>
+            {row?.sku_name}
+          </Tooltip>
+        );
+      },
     },
     {
       title: t("qtyDelivery"),
@@ -1194,7 +1242,7 @@ const PurchasingView = (props) => {
       dataIndex: "buyer_name",
       key: "buyer_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("buyer_name"),
       filteredValue: filteredInfo?.buyer_name || null,
       onFilter: (value, record) => {
@@ -1302,7 +1350,7 @@ const PurchasingView = (props) => {
           row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
         ) {
-          tagStatus = renderTag("error", "at PPIC");
+          tagStatus = renderTag("error", "at PPIC (retur)");
         }
         if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           tagStatus = renderTag("error", `at Supplier ${row?.supplier?.name}`);
@@ -1719,12 +1767,12 @@ const PurchasingView = (props) => {
                 </>
               )}
             </Space>
-
-            {!editTableMode && (
+            {editTableMode && (
               <Table
                 {...tableProps}
                 dataSource={dataSource}
                 components={components}
+                rowKey="id"
                 rowClassName={rowClassName}
                 columns={columns}
                 pagination={{
@@ -1738,11 +1786,12 @@ const PurchasingView = (props) => {
                 onChange={handleChange}
               />
             )}
-            {editTableMode && (
+            {!editTableMode && (
               <Table
                 {...tableProps}
                 dataSource={dataSource}
                 components={components}
+                rowKey="id"
                 rowClassName={rowClassName}
                 columns={columns}
                 pagination={{

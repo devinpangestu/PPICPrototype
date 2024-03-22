@@ -318,6 +318,15 @@ const SupplierView = (props) => {
         return utils.thousandSeparator(row.qty_delivery);
       },
     },
+
+    {
+      title: t("estDelivery"),
+      dataIndex: "est_delivery",
+      key: "est_delivery",
+      render: (_, row) => {
+        return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+      },
+    },
     {
       title: t("sendSupplierDate"),
       dataIndex: "send_supplier_date",
@@ -326,14 +335,6 @@ const SupplierView = (props) => {
         return row.send_supplier_date
           ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
           : "-";
-      },
-    },
-    {
-      title: t("estDelivery"),
-      dataIndex: "est_delivery",
-      key: "est_delivery",
-      render: (_, row) => {
-        return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
       },
     },
     // {
@@ -354,24 +355,24 @@ const SupplierView = (props) => {
     //       : "-";
     //   },
     // },
-    // {
-    //   title: t("supplierQty"),
-    //   dataIndex: "submitted_qty",
-    //   key: "submitted_qty",
-    //   render: (_, row) => {
-    //     return utils.thousandSeparator(row.submitted_qty);
-    //   },
-    // },
-    // {
-    //   title: t("supplierDate"),
-    //   dataIndex: "est_submitted_date",
-    //   key: "est_submitted_date",
-    //   render: (_, row) => {
-    //     return row.est_submitted_date
-    //       ? moment(row.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
-    //       : "-";
-    //   },
-    // },
+    {
+      title: t("supplierQty"),
+      dataIndex: "submitted_qty",
+      key: "submitted_qty",
+      render: (_, row) => {
+        return utils.thousandSeparator(row.submitted_qty);
+      },
+    },
+    {
+      title: t("supplierDate"),
+      dataIndex: "est_submitted_date",
+      key: "est_submitted_date",
+      render: (_, row) => {
+        return row.est_submitted_date
+          ? moment(row.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
     {
       title: t("action"),
       dataIndex: "action",
@@ -382,6 +383,7 @@ const SupplierView = (props) => {
         let btnSplit;
         let btnConfirm;
         let btnClosePO;
+        let tagStatus;
         let tagHutangKirim;
         const renderTag = (color, text) => (
           <div
@@ -398,10 +400,7 @@ const SupplierView = (props) => {
         );
 
         tagHutangKirim = row?.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
-        if (
-          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
-          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
-        ) {
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           btnSplit = (
             <Button
               className="mr-1 mb-1"
@@ -478,6 +477,7 @@ const SupplierView = (props) => {
             );
           }
         }
+
         return (
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
             {tagHutangKirim}
@@ -540,19 +540,29 @@ const SupplierView = (props) => {
             //count the next true value and break the loop after false and if the true is counted, ignore them
           }
         };
-        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <Tag className="ma-0" color="success">
-                Completed
-              </Tag>
-            </div>
-          );
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
+          </div>
+        );
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) {
+          tagStatus = renderTag("warning", "Request (PPIC)");
         }
-        if (
-          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
-          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
-        ) {
+        if (row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST) {
+          tagStatus = renderTag("warning", "Request (Procurement)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+          tagStatus = renderTag("success", "Complete Schedule");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           btnEditAndSend = (
             <Button
               className="mr-1 mb-1"
@@ -620,13 +630,14 @@ const SupplierView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              {btnEditAndSend}
-              {btnConfirm}
-            </div>
-          );
         }
+        return (
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {tagStatus}
+            {btnEditAndSend}
+            {btnConfirm}
+          </div>
+        );
       },
     },
   ];

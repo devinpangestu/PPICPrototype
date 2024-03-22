@@ -130,9 +130,6 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                   >{`${t("dashboard")}`}</NavLink>
                 </Menu.Item>,
                 "ppic@view",
-                "ppic@create",
-                "ppic@edit",
-                "ppic@delete",
               )}
               {utils.renderWithPermission(
                 userInfo.permissions,
@@ -194,7 +191,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.Divider />
           </>
         )}
-        {canViewTransactionHistory && (
+        {userInfo.role.id !== 5 && userInfo.role.id !== 6 && (
           <>
             <Menu.SubMenu
               style={{ fontSize: conditionalMobileState("10px", "14px") }}

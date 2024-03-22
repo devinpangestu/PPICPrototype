@@ -428,6 +428,112 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                 </Form.Item>
               </Col>
             </Row>
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item
+                  label={`No PR/PO ${lineNumShowManual ? "" : ""}`}
+                  name="po_number"
+                  rules={[
+                    {
+                      required: lineNumShowManual,
+                      message: `${t("input")} ${t("No PR/PO")}`,
+                    },
+                  ]}
+                >
+                  <Input
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setDisableRefreshPOPR(false);
+                        setShowPRDetail(false);
+                        setPRDetail([]);
+                        setSKUNameOptions([]);
+                        form.setFieldsValue({ sku_name: null });
+                        if (e.target.value.substring(0, 2) === "PR") {
+                          setLineNumShowManual(true);
+                          setSkuCodeShowManual(true);
+                        } else if (
+                          e.target.value.substring(0, 2) === "PO" ||
+                          e.target.value.substring(0, 2) === "PI"
+                        ) {
+                          setSkuCodeShowManual(false);
+                          setLineNumShowManual(true);
+                        } else {
+                          setSkuCodeShowManual(false);
+                          setLineNumShowManual(false);
+                        }
+                      } else {
+                        setDisableRefreshPOPR(true);
+                        setLineNumShowManual(false);
+                      }
+                      if (
+                        form.getFieldValue("submission_date") &&
+                        form.getFieldValue("po_number") &&
+                        form.getFieldValue("sku_name") &&
+                        form.getFieldValue("io_filter") &&
+                        form.getFieldValue("category_filter") &&
+                        form.getFieldValue("est_delivery") &&
+                        form.getFieldValue("qty_delivery")
+                      ) {
+                        setDisableSubmit(false);
+                      } else {
+                        setDisableSubmit(true);
+                      }
+                    }}
+                    placeholder={`${t("input")} ${t("No PR/PO")}`}
+                    addonAfter={
+                      <Button
+                        type="primary"
+                        icon={<ReloadOutlined />}
+                        onClick={handleRefreshPOPR}
+                        disabled={disableRefreshPOPR}
+                      />
+                    }
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              {SKUNameOptions.length > 0 && (
+                <Col span={24}>
+                  <Form.Item
+                    name="sku_name"
+                    label={t("SKU Name")}
+                    rules={[
+                      {
+                        required: true,
+                        message: `${t("please")} ${t("input")} ${t("SKU Name")}`,
+                      },
+                    ]}
+                  >
+                    <Select
+                      showSearch
+                      placeholder={`${t("select")} ${t("SKU Name")}`}
+                      {...configs.FORM_SELECT_SEARCHABLE_PROPS}
+                      options={SKUNameOptions}
+                      onChange={(value) => {
+                        console.log(value);
+                        const selectedSKU = PRDetail.find((el) => el.LINE_NUM === value);
+                        setSelectedSKU(selectedSKU);
+                        setShowPRDetail(true);
+                        if (
+                          form.getFieldValue("submission_date") &&
+                          form.getFieldValue("po_number") &&
+                          form.getFieldValue("sku_name") &&
+                          form.getFieldValue("io_filter") &&
+                          form.getFieldValue("category_filter") &&
+                          form.getFieldValue("est_delivery") &&
+                          form.getFieldValue("qty_delivery")
+                        ) {
+                          setDisableSubmit(false);
+                        } else {
+                          setDisableSubmit(true);
+                        }
+                      }}
+                    />
+                  </Form.Item>
+                </Col>
+              )}
+            </Row>
           </Col>
           {showPRDetail && (
             <Col span={12}>
@@ -495,7 +601,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
 
         <>
           <Row gutter={16}>
-            <Col span={12}>
+            {/* <Col span={12}>
               <Form.Item
                 label={`No PR/PO ${lineNumShowManual ? "" : ""}`}
                 name="po_number"
@@ -556,47 +662,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                   }
                 />
               </Form.Item>
-            </Col>
-            {SKUNameOptions.length > 0 && (
-              <Col span={12}>
-                <Form.Item
-                  name="sku_name"
-                  label={t("SKU Name")}
-                  rules={[
-                    {
-                      required: true,
-                      message: `${t("please")} ${t("input")} ${t("SKU Name")}`,
-                    },
-                  ]}
-                >
-                  <Select
-                    showSearch
-                    placeholder={`${t("select")} ${t("SKU Name")}`}
-                    {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                    options={SKUNameOptions}
-                    onChange={(value) => {
-                      console.log(value);
-                      const selectedSKU = PRDetail.find((el) => el.LINE_NUM === value);
-                      setSelectedSKU(selectedSKU);
-                      setShowPRDetail(true);
-                      if (
-                        form.getFieldValue("submission_date") &&
-                        form.getFieldValue("po_number") &&
-                        form.getFieldValue("sku_name") &&
-                        form.getFieldValue("io_filter") &&
-                        form.getFieldValue("category_filter") &&
-                        form.getFieldValue("est_delivery") &&
-                        form.getFieldValue("qty_delivery")
-                      ) {
-                        setDisableSubmit(false);
-                      } else {
-                        setDisableSubmit(true);
-                      }
-                    }}
-                  />
-                </Form.Item>
-              </Col>
-            )}
+            </Col> */}
           </Row>
 
           <Row gutter={16}>
@@ -809,7 +875,8 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                   disabledDate={(current) => {
                     return current && current < moment().startOf("day");
                   }}
-                  onChange={() => {
+                  onChange={(e) => {
+                    console.log(e);
                     //check all required input
                     if (
                       form.getFieldValue("submission_date") &&
@@ -825,6 +892,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                       setDisableSubmit(true);
                     }
                   }}
+                  picker="month"
                 />
               </Form.Item>
             </Col>

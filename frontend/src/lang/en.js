@@ -9,7 +9,7 @@ export const en = {
     SKUName: "SKU Name",
     qtyDelivery: "Qty Delivery",
     estDelivery: "Estimated Delivery",
-    sendSupplierDate: "Schedule Send At",
+    sendSupplierDate: "Schedule Send Date",
     supplierConfirmDate: "Supplier Confirm Date",
     revisedQty: "Revised Qty",
     revisedDate: "Revised Date",

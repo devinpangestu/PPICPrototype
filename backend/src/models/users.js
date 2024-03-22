@@ -73,6 +73,13 @@ export default (sequelize, DataTypes) => {
         as: "from_supplier",
         targetKey: "ref_id",
       });
+      this.belongsTo(models.OFFERS, {
+        foreignKey: {
+          name: "supplier_id",
+        },
+        as: "user_supplier",
+        targetKey: "supplier_id",
+      });
 
       // db.mhOverLoc.belongsTo(db.USERS, {
       //   foreignKey: "created_by_id",

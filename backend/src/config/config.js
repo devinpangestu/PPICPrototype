@@ -16,7 +16,7 @@ const x = {
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
     pool: {
-      max: 5,
+      max: Infinity,
       idle: 30000,
       acquire: 60000,
     },
@@ -33,7 +33,7 @@ const x = {
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
     pool: {
-      max: 5,
+      max: Infinity,
       idle: 30000,
       acquire: 60000,
     },
@@ -49,7 +49,7 @@ const x = {
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
     pool: {
-      max: 5,
+      max: Infinity,
       idle: 30000,
       acquire: 60000,
     },

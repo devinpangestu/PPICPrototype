@@ -112,20 +112,21 @@ const sendEmailNotificationPPICProc = async (subject, text, target) => {
                                                               <tr>
                                                                   <td class="pad">
                                                                       <div style="color:#00703c;font-family:'Playfair Display',Georgia,serif;font-size:30px;font-weight:700;line-height:120%;text-align:center;mso-line-height-alt:36px;">
-                                                                          <p style="margin: 0; word-break: break-word;"><span>Detail Jadwal PO</span></p>
+                                                                          <p style="margin: 0; word-break: break-word;">
+                                                                            <span>
+                                                                                ${text}
+                                                                            </span>
+                                                                          </p> 
+                                                                          <p style="margin: 0; word-break: break-word;">
+                                                                          <span>
+                                                                              Link : <a href="${process.env.BASE_URL_CLIENT}">${process.env.BASE_URL_CLIENT}</a>
+                                                                          </span>
+                                                                        </p>
                                                                       </div>
                                                                   </td>
                                                               </tr>
                                                           </table>
-                                                          <table class="paragraph_block block-2" width="100%" border="0" cellpadding="10" cellspacing="0" role="presentation" style="mso-table-lspace: 0pt; mso-table-rspace: 0pt; word-break: break-word;">
-                                                              <tr>
-                                                                  <td class="pad">
-                                                                      <div style="color:#00703c;font-family:Nunito, Arial, Helvetica Neue, Helvetica, sans-serif;font-size:14px;font-weight:700;line-height:120%;text-align:left;mso-line-height-alt:16.8px;">
-                                                                          ${text}
-                                                                      </div>
-                                                                  </td>
-                                                              </tr>
-                                                          </table>
+                                                          
                                                       </td>
                                                   </tr>
                                               </tbody>

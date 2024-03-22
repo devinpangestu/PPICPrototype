@@ -77,15 +77,13 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
 
       reader.onloadend = (e) => {
         const rows = CSV.parse(e.target.result);
-
         for (const r of rows) {
-          // if (r.length !== 9) {
-          //   continue;
-          // }
-          if (tempMassCreateFileContent.find((el) => el.po_number === r[0])) {
-            // skip duplicate transportir_id
+          if (r.every((value) => value === "")) {
             continue;
           }
+          // if (tempMassCreateFileContent.find((el) => el.po_number === r[4])) {
+          //   continue;
+          // }
           tempMassCreateFileContent.push({
             io_filter: r[0],
             category_filter: r[1],

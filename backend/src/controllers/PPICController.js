@@ -21,6 +21,7 @@ import moment from "moment";
 import { constant } from "../constant/index.js";
 import sendEmailNotificationPPICProc from "../utils/emailTemplate/sendEmailNotificationPPICProc.js";
 import { PPICProcSentences } from "../utils/emailTemplate/sentences/PPICProcSentences.js";
+import sendEmailNotificationProcSupplier from "../utils/emailTemplate/sendEmailNotificationProcSupplier.js";
 
 export const PPICScheduleSummary = async (req, res) => {
   try {
@@ -203,7 +204,7 @@ export const PPICScheduleList = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
         },
         {
           model: db.USERS,
@@ -213,7 +214,12 @@ export const PPICScheduleList = async (req, res) => {
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
       where: whereClause,
@@ -402,8 +408,8 @@ export const PPICScheduleCreate = async (req, res) => {
           if (!err) {
             return errorResponse(req, res, "Gagal mencari data PO Outstanding");
           }
-          console.log(result[0]);
-          if (rowToInsert.po_outs > result[0].QUANTITY_OUTSTANDING) {
+
+          if (rowToInsert.po_outs !== result[0].QUANTITY_OUTSTANDING) {
             return errorResponse(
               req,
               res,
@@ -419,6 +425,7 @@ export const PPICScheduleCreate = async (req, res) => {
         if (!err) {
           return errorResponse(req, res, "Gagal mendapatkan data line number");
         }
+        console.log(resultLine);
         if (resultLine.length === 0) {
           return errorResponse(
             req,
@@ -585,16 +592,16 @@ export const PPICScheduleCreate = async (req, res) => {
             return errorResponse(
               req,
               res,
-              "Jumlah quantity pengiriman melebihi outstanding quantity, mohon cek jadwal yang telah terdaftar"
+              "Total quantity pengiriman melebihi outstanding quantity, mohon cek jadwal yang telah terdaftar dalam sistem"
             );
           }
-          if (sumQtyDelivery >= po_outs) {
-            return errorResponse(
-              req,
-              res,
-              "Jumlah quantity pengiriman melebihi outstanding quantity, mohon cek kembali"
-            );
-          }
+          // if (sumQtyDelivery >= po_outs) {
+          //   return errorResponse(
+          //     req,
+          //     res,
+          //     "Jumlah quantity pengiriman melebihi outstanding quantity, mohon cek kembali"
+          //   );
+          // }
         }
 
         if (po_outs > po_qty) {
@@ -704,8 +711,7 @@ export const PPICScheduleCreate = async (req, res) => {
 };
 
 export const PPICScheduleSplitPPIC = async (req, res) => {
-  const dbTransactionUpdate = await db.sequelize.transaction();
-  const dbTransactionDelete = await db.sequelize.transaction();
+  const dbTransaction = await db.sequelize.transaction();
   try {
     const offer_id = req.params.id;
     const { schedules } = req.body.rq_body;
@@ -748,10 +754,8 @@ export const PPICScheduleSplitPPIC = async (req, res) => {
         qty_delivery: schedules[key].qty_delivery,
       };
       await db.OFFERS.create(payloadForSplittedSchedule, {
-        transaction: dbTransactionUpdate,
+        transaction: dbTransaction,
       });
-
-      await dbTransactionUpdate.commit();
     }
 
     // Delete the original entry
@@ -759,15 +763,14 @@ export const PPICScheduleSplitPPIC = async (req, res) => {
       {
         where: { id: offer_id },
       },
-      { transaction: dbTransactionDelete }
+      { transaction: dbTransaction }
     );
     // Commit the transaction
-    await dbTransactionDelete.commit();
+    await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule splitted");
   } catch (error) {
-    await dbTransactionDelete.rollback();
-    await dbTransactionUpdate.rollback();
+    await dbTransaction.rollback();
 
     return errorResponse(req, res, error.message);
   }
@@ -789,12 +792,22 @@ export const PPICScheduleGet = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
         },
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
       where: { id },
@@ -903,8 +916,6 @@ export const PPICScheduleGetInputPRDetails = async (req, res) => {
 };
 
 export const PPICScheduleEdit = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
-
   try {
     const { schedules } = req.body.rq_body;
     const userName = getUserName(req);
@@ -931,48 +942,140 @@ export const PPICScheduleEdit = async (req, res) => {
         supplier,
         io_filter,
         category_filter,
+        notes,
       } = schedules;
+      if (
+        po_number.substring(0, 2) === "PO" ||
+        po_number.substring(0, 2) === "PI"
+      ) {
+        const [err, resultLine] = await OpenQueryGetLineNum(
+          po_number,
+          sku_code
+        );
+        if (!err) {
+          return errorResponse(req, res, "Gagal mendapatkan data line number");
+        }
+        if (resultLine.length === 0) {
+          return errorResponse(
+            req,
+            res,
+            `Data PO ${po_number} dan barang ${sku_name} tidak ditemukan`
+          );
+        }
 
-      const checkIfDataExist = await db.OFFERS.findOne({
-        where: {
-          submission_date,
-          supplier_id: supplier?.ref_id, //dicari dulu id nya sesuai
-          po_number,
-          po_qty,
-          po_outs,
-          sku_code,
-          sku_name,
-          qty_delivery,
-          est_delivery,
-          io_filter,
-          category_filter,
-          deleted_at: null,
-        },
-      });
-      if (checkIfDataExist) {
-        return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
-      }
-      await db.OFFERS.update(
-        {
-          submission_date,
-          supplier_id: supplier?.ref_id, //dicari dulu id nya sesuai
-          po_number,
-          po_qty,
-          po_outs,
-          sku_code,
-          sku_name,
-          qty_delivery,
-          est_delivery,
-          io_filter,
-          category_filter,
-          updated_by_id: userId,
-          updated_at: new Date(),
-        },
-        {
+        let getSupplierId;
+        if (!supplier) {
+          //get supplier id
+          getSupplierId = await db.SUPPLIERS.findOne({
+            attributes: ["ref_id"],
+            where: { name: resultLine[0].VENDOR_NAME },
+            raw: true,
+          });
+        } else {
+          getSupplierId = await db.SUPPLIERS.findOne({
+            attributes: ["ref_id"],
+            where: { name: resultLine[0].VENDOR_NAME },
+            raw: true,
+          });
+        }
+
+        const getBuyerId = await db.USERS.findOne({
+          attributes: ["id"],
+          raw: true,
+          where: { oracle_username: resultLine[0].BUYER_NAME },
+        });
+
+        if (!getBuyerId) {
+          return errorResponse(
+            req,
+            res,
+            `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
+          );
+        }
+        console.log(1085);
+        const getExistingHistory = await db.OFFERS.findOne({
           where: { id },
-        },
-        { transaction: dbTransaction }
-      );
+          raw: true,
+        });
+        const history = JSON.parse(getExistingHistory?.history);
+        const getNotes = JSON.parse(getExistingHistory?.notes);
+        console.log({
+          history: JSON.stringify([
+            ...(history || []),
+            {
+              detail: `${moment().format(
+                constant.FORMAT_DISPLAY_DATETIME
+              )} Schedule Force Edited by ${userName},
+              changes :
+              Supplier : ${
+                supplier
+                  ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                  : ""
+              }
+              - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                resultLine[0].PO_NUMBER
+              }
+              - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
+              - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
+              By ${userName} `,
+              created_at: new Date(),
+              created_by: userName,
+            },
+          ]),
+        });
+
+        await db.OFFERS.update(
+          {
+            submission_date,
+            supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty: Number(resultLine[0].QUANTITY),
+            sku_code,
+            sku_name,
+            line_num: Number(resultLine[0].LINE_NUMBER),
+            po_outs: parseFloat(resultLine[0].QTY_OUTS),
+            qty_delivery: Number(qty_delivery),
+            est_delivery: new Date(est_delivery),
+            updated_by_id: userId,
+            updated_at: new Date(),
+            buyer_id: getBuyerId.id,
+            history: JSON.stringify([
+              ...(history || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule Force Edited by ${userName},
+                changes :
+                Supplier : ${
+                  supplier
+                    ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                    : ""
+                }
+                - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                  resultLine[0].PO_NUMBER
+                }
+                - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
+                - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
+                By ${userName} `,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            notes: JSON.stringify({
+              ...getNotes,
+              init: {
+                notes: notes,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            }),
+            flag_status: "A",
+          },
+          {
+            where: { id },
+          }
+        );
+      }
     } else {
       for (let key in schedules) {
         const {
@@ -1025,8 +1128,7 @@ export const PPICScheduleEdit = async (req, res) => {
             },
             {
               where: { id },
-            },
-            { transaction: dbTransaction }
+            }
           );
         } else if (
           po_number.substring(0, 2) === "PO" ||
@@ -1059,6 +1161,12 @@ export const PPICScheduleEdit = async (req, res) => {
               where: { name: resultLine[0].VENDOR_NAME },
               raw: true,
             });
+          } else {
+            getSupplierId = await db.SUPPLIERS.findOne({
+              attributes: ["ref_id"],
+              where: { name: resultLine[0].VENDOR_NAME },
+              raw: true,
+            });
           }
           // else {
           //   //checking if supplier same with oracle
@@ -1070,13 +1178,13 @@ export const PPICScheduleEdit = async (req, res) => {
           //     );
           //   }
           // }
-          console.log(1071);
+
           const getBuyerId = await db.USERS.findOne({
             attributes: ["id"],
             raw: true,
             where: { oracle_username: resultLine[0].BUYER_NAME },
           });
-          console.log(1077);
+
           if (!getBuyerId) {
             return errorResponse(
               req,
@@ -1087,55 +1195,38 @@ export const PPICScheduleEdit = async (req, res) => {
           console.log(1085);
           const getExistingHistory = await db.OFFERS.findOne({
             where: { id },
-            attributes: ["history"],
             raw: true,
           });
           console.log(1090);
           const history = JSON.parse(getExistingHistory?.history);
           console.log({
             submission_date: new Date(submission_date),
-            supplier_id: supplier ? supplier?.ref_id : getSupplierId.ref_id, //dicari dulu id nya sesuai
+            supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
             po_number,
             po_qty: Number(resultLine[0].QUANTITY),
             po_outs: Number(resultLine[0].QTY_OUTS),
             sku_code,
             sku_name,
             line_num: Number(resultLine[0].LINE_NUMBER),
-            qty_delivery,
+            qty_delivery: Number(resultLine[0].QTY_OUTS),
             est_delivery: new Date(est_delivery),
             updated_by_id: Number(userId),
             updated_at: new Date(),
             buyer_id: getBuyerId.id,
-            history: JSON.stringify([
-              ...(history || []),
-              {
-                detail: `${moment().format(
-                  constant.FORMAT_DISPLAY_DATETIME
-                )} Schedule Edited by ${userName},
-                changes :
-                Supplier : ${
-                  supplier ? ` "" -> ${resultLine[0].VENDOR_NAME} ` : ""
-                }
-                - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
-                - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
-                By ${userName} `,
-                created_at: new Date(),
-                created_by: userName,
-              },
-            ]),
           });
+
           await db.OFFERS.update(
             {
               submission_date,
-              supplier_id: supplier ? supplier?.ref_id : getSupplierId.ref_id, //dicari dulu id nya sesuai
+              supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
               po_number,
               po_qty: Number(resultLine[0].QUANTITY),
-              po_outs: Number(resultLine[0].QTY_OUTS),
               sku_code,
               sku_name,
               line_num: Number(resultLine[0].LINE_NUMBER),
+              po_outs: parseFloat(resultLine[0].QTY_OUTS),
               qty_delivery: Number(resultLine[0].QTY_OUTS),
-              est_delivery,
+              est_delivery: new Date(est_delivery),
               updated_by_id: userId,
               updated_at: new Date(),
               buyer_id: getBuyerId.id,
@@ -1147,7 +1238,12 @@ export const PPICScheduleEdit = async (req, res) => {
                   )} Schedule Edited by ${userName},
                   changes :
                   Supplier : ${
-                    supplier ? ` "" -> ${resultLine[0].VENDOR_NAME} ` : ""
+                    supplier
+                      ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                      : ""
+                  }
+                  - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                    resultLine[0].PO_NUMBER
                   }
                   - Updating PO Quantity : ${po_qty} -> ${
                     resultLine[0].QUANTITY
@@ -1161,17 +1257,14 @@ export const PPICScheduleEdit = async (req, res) => {
             },
             {
               where: { id },
-            },
-            { transaction: dbTransaction }
+            }
           );
         }
       }
     }
 
-    await dbTransaction.commit();
     return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1211,18 +1304,14 @@ export const PPICScheduleRefreshPOOuts = async (req, res) => {
       if (po_number === "") {
         continue;
       } else {
-        const [err, res] = await OpenQueryPOOutsNoPO(
-          po_number,
-          sku_code,
-          dbTransaction
-        );
+        const [err, res] = await OpenQueryGetLineNum(po_number, sku_code);
 
         if (!err) {
           return errorResponse(req, res, "Gagal refresh data PO Outs");
         }
 
-        const qtyOuts = res[0].QUANTITY_OUTSTANDING;
-
+        const qtyOuts = res[0].QTY_OUTS;
+        console.log(res[0]);
         if (qtyOuts == null) {
           continue;
         } else {
@@ -1359,8 +1448,8 @@ export const PPICScheduleSendToPurchasing = async (req, res) => {
     const sentencesText = PPICProcSentences(rq_body);
 
     await sendEmailNotificationPPICProc(
-      "List Jadwal Pengiriman yang diperlukan",
-      sentencesText,
+      "BKP - Jadwal Pengiriman Barang ke Procurement",
+      `New Schedule has been submitted, please check to your account`,
       [...new Set(buyerEmail)]
     );
 
@@ -1377,8 +1466,7 @@ export const PPICScheduleSendToPurchasing = async (req, res) => {
   }
 };
 export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
-  const dbTransactionUpdate = await db.sequelize.transaction();
-  const dbTransactionDelete = await db.sequelize.transaction();
+  const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
 
@@ -1397,7 +1485,17 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
         },
       ],
     });
@@ -1433,32 +1531,29 @@ export const PPICScheduleAcceptSplitSupplier = async (req, res) => {
         {
           where: { id: checkAnotherSplit[key].id },
         },
-        { transaction: dbTransactionUpdate }
+        { transaction: dbTransaction }
       );
-      await dbTransactionUpdate.commit();
     }
     //delete the original data
     await db.OFFERS.destroy(
       {
         where: { id: checkTheCurrentID.split_from_id },
       },
-      { transaction: dbTransactionDelete }
+      { transaction: dbTransaction }
     );
-    await dbTransactionDelete.commit();
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Accepted");
   } catch (error) {
-    await dbTransactionUpdate.rollback();
-    await dbTransactionDelete.rollback();
+    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
 export const PPICScheduleRejectSplitSupplier = async (req, res) => {
-  const dbTransactionUpdate = await db.sequelize.transaction();
-  const dbTransactionDelete = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1470,9 +1565,19 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1505,31 +1610,27 @@ export const PPICScheduleRejectSplitSupplier = async (req, res) => {
       },
       {
         where: { id: checkTheCurrentID.split_from_id },
-      },
-      { transaction: dbTransactionUpdate }
+      }
     );
-    await dbTransactionUpdate.commit();
-
+    supplierEmail.push(checkTheCurrentID?.user_supplier?.email);
     //delete the splitted data
     for (let key in checkAnotherSplit) {
-      await db.OFFERS.destroy(
-        {
-          where: { id: checkAnotherSplit[key].id },
-        },
-        { transaction: dbTransactionDelete }
-      );
-      await dbTransactionDelete.commit();
+      await db.OFFERS.destroy({
+        where: { id: checkAnotherSplit[key].id },
+      });
     }
+    await sendEmailNotificationProcSupplier(
+      "BKP - Schedule Split Request [Rejected]",
+      `Split Request Rejected by PPIC ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
-    await dbTransactionUpdate.rollback();
-    await dbTransactionDelete.rollback();
     return errorResponse(req, res, error.message);
   }
 };
 export const PPICScheduleAcceptEditSupplier = async (req, res) => {
-  const dbTransactionUpdate = await db.sequelize.transaction();
-  const dbTransactionDelete = await db.sequelize.transaction();
+  const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
@@ -1545,9 +1646,19 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1586,33 +1697,32 @@ export const PPICScheduleAcceptEditSupplier = async (req, res) => {
         {
           where: { id: checkAnotherEditedOffer[key].id },
         },
-        { transaction: dbTransactionUpdate }
+        { transaction: dbTransaction }
       );
-      await dbTransactionUpdate.commit();
       //delete the original data
       await db.OFFERS.destroy(
         {
           where: { id: checkAnotherEditedOffer[key].dataValues.edit_from_id },
         },
-        { transaction: dbTransactionDelete }
+        { transaction: dbTransaction }
       );
-      await dbTransactionDelete.commit();
     }
 
+    await dbTransaction.commit();
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
-    await dbTransactionDelete.rollback();
-    await dbTransactionUpdate.rollback();
+    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
 export const PPICScheduleRejectEditSupplier = async (req, res) => {
-  const dbTransactionUpdate = await db.sequelize.transaction();
-  const dbTransactionDelete = await db.sequelize.transaction();
+  const dbTransaction = await db.sequelize.transaction();
+
   try {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1624,9 +1734,19 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1638,7 +1758,7 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
         flag_status: "G",
       },
     });
-    console.log(checkAnotherEditedOffer, "checkAnotherEditedOffer");
+
     for (let key in checkAnotherEditedOffer) {
       //restore the original data
       await db.OFFERS.update(
@@ -1668,23 +1788,27 @@ export const PPICScheduleRejectEditSupplier = async (req, res) => {
             is_edit: true,
           },
         },
-        { transaction: dbTransactionUpdate }
+        { transaction: dbTransaction }
       );
-      await dbTransactionUpdate.commit();
       //delete the Edited data
       await db.OFFERS.destroy(
         {
           where: { id: checkAnotherEditedOffer[key].dataValues.id },
         },
-        { transaction: dbTransactionDelete }
+        { transaction: dbTransaction }
       );
-      await dbTransactionDelete.commit();
+      supplierEmail.push(checkAnotherEditedOffer[key].user_supplier?.email);
     }
+
+    await sendEmailNotificationProcSupplier(
+      "BKP - Schedule Edit Request [Rejected]",
+      `Edit Request Rejected by PPIC ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
 
     return successResponse(req, res, "Edit Request Rejected");
   } catch (error) {
-    await dbTransactionUpdate.rollback();
-    await dbTransactionDelete.rollback();
+    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1705,9 +1829,19 @@ export const PPICScheduleAcceptClosePOSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1743,11 +1877,11 @@ export const PPICScheduleAcceptClosePOSupplier = async (req, res) => {
   }
 };
 export const PPICScheduleRejectClosePOSupplier = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1761,7 +1895,12 @@ export const PPICScheduleRejectClosePOSupplier = async (req, res) => {
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1787,13 +1926,17 @@ export const PPICScheduleRejectClosePOSupplier = async (req, res) => {
       },
       {
         where: { id },
-      },
-      { transaction: dbTransaction }
+      }
     );
-    await dbTransaction.commit();
+    supplierEmail.push(checkTheCurrentID?.user_supplier?.email);
+
+    await sendEmailNotificationProcSupplier(
+      "BKP - Close PO Request [Rejected]",
+      `Close PO Request Rejected by PPIC ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
     return successResponse(req, res, "Close PO Request Rejected");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1914,19 +2057,21 @@ const OpenQueryPODetails = async (poNumber, lineNumber, transaction) => {
 
 const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
   const skuSplit = skuCode.split(".");
+  console.log(skuSplit, "skuSplit");
+  console.log(poNumber.replace(/[^a-zA-Z0-9 ]/g, ""));
   const getPODetails = (po, skucode) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1, PLA.LINE_NUM, PLA.QUANTITY, 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1 PO_NUMBER, PLA.LINE_NUM , PLA.QUANTITY, 
     SUM(PDA.QUANTITY_ORDERED-PDA.QUANTITY_DELIVERED-PDA.QUANTITY_CANCELLED) QTY_OUTS,
     PLA.LINE_NUM LINE_NUMBER, MSI.DESCRIPTION NAMA_SKU,FU.USER_NAME BUYER_NAME
     FROM APPS.PO_HEADERS_ALL PHA, APPS.PO_LINES_ALL PLA, APPS.PO_DISTRIBUTIONS_ALL PDA,
     APPS.AP_SUPPLIERS APS,APPS.MTL_SYSTEM_ITEMS MSI,APPS.PER_ALL_PEOPLE_F PAP, APPS.FND_USER FU
     WHERE 1=1
-    AND PHA.SEGMENT1 = ''${po}''
+    AND PHA.SEGMENT1 = ''${po.replace(/[^a-zA-Z0-9 ]/g, "")}''
     AND PHA.PO_HEADER_ID = PLA.PO_HEADER_ID
     AND PLA.PO_LINE_ID = PDA.PO_LINE_ID
-    AND MSI.SEGMENT1 = ''${skucode[0]}''
-    AND MSI.SEGMENT2 = ''${skucode[1]}''
-    AND MSI.SEGMENT3 = ''${skucode[2]}''
+    AND MSI.SEGMENT1 = ''${skucode[0].replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND MSI.SEGMENT2 = ''${skucode[1].replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND MSI.SEGMENT3 = ''${skucode[2].replace(/[^a-zA-Z0-9 ]/g, "")}''
     AND PHA.VENDOR_ID = APS.VENDOR_ID
     AND PLA.ITEM_ID = MSI.INVENTORY_ITEM_ID
     AND MSI.ORGANIZATION_ID = 101

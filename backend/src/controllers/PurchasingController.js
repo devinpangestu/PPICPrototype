@@ -20,6 +20,10 @@ import {
 import { constant } from "../constant/index.js";
 import moment from "moment";
 import { OpenQueryGetLineNum, OpenQueryPOOuts } from "../utils/openQuery.js";
+import sendEmailNotificationProcSupplier from "../utils/emailTemplate/sendEmailNotificationProcSupplier.js";
+import sendEmailNotificationProcPPICEdit from "../utils/emailTemplate/sendEmailNotificationProcPPICEdit.js";
+import sendEmailNotificationProcPPICSplit from "../utils/emailTemplate/sendEmailNotificationProcPPICSplit.js";
+import sendEmailNotificationProcPPICClosePO from "../utils/emailTemplate/sendEmailNotificationProcPPICClosePO.js";
 
 export const PurchasingScheduleSummary = async (req, res) => {
   try {
@@ -105,7 +109,6 @@ export const PurchasingScheduleSummary = async (req, res) => {
         [Sequelize.fn("count", Sequelize.col("flag_status")), "count"],
       ],
       where: whereClause,
-      //created_by_id: userId, //TODO: change to user id
       group: ["flag_status"],
     });
 
@@ -202,7 +205,7 @@ export const PurchasingScheduleList = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
         },
         {
           model: db.USERS,
@@ -212,7 +215,12 @@ export const PurchasingScheduleList = async (req, res) => {
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
       where: whereClause,
@@ -507,12 +515,22 @@ export const PurchasingScheduleGet = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
         },
         {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
       where: { id },
@@ -539,11 +557,11 @@ export const PurchasingScheduleEdit = async (req, res) => {
       );
     }
     //check if id ship is exist
-    for (let key in schedules) {
+    if (schedules?.is_edit) {
       const {
         id,
         submission_date,
-        supplier,
+        supplier_name,
         po_number,
         po_qty,
         po_outs,
@@ -551,124 +569,81 @@ export const PurchasingScheduleEdit = async (req, res) => {
         sku_name,
         qty_delivery,
         est_delivery,
-      } = schedules[key];
-      //check if name is exist
-      const checkIfDataExist = await db.OFFERS.findOne({
-        where: {
-          submission_date,
-          supplier_id: supplier.ref_id, //dicari dulu id nya sesuai
+        supplier,
+        io_filter,
+        category_filter,
+        notes,
+      } = schedules;
+      if (
+        po_number.substring(0, 2) === "PO" ||
+        po_number.substring(0, 2) === "PI"
+      ) {
+        const [err, resultLine] = await OpenQueryGetLineNum(
           po_number,
-          po_qty,
-          po_outs,
-          sku_code,
-          sku_name,
-          qty_delivery,
-          est_delivery,
-        },
-      });
-
-      if (checkIfDataExist) {
-        return errorResponse(req, res, "Ada data duplikat, mohon cek kembali");
-      }
-
-      if (po_number === "") {
-        continue;
-      } else {
-        const [err, result] = await OpenQueryPOOuts(
-          po_number,
-          sku_code,
-          dbTransaction
+          sku_code
         );
         if (!err) {
-          return errorResponse(req, res, "Gagal mencari data PO Outstanding");
+          return errorResponse(req, res, "Gagal mendapatkan data line number");
         }
-
-        if (qty_delivery > result[0].QUANTITY_OUTSTANDING) {
+        if (resultLine.length === 0) {
           return errorResponse(
             req,
             res,
-            `Outstanding quantity tidak cocok dengan data outstanding quantity Oracle untuk ${po_number} dan barang ${sku_name}, apabila terjadi kesalahan silahkan retur ke PPIC untuk update Quantity Pengiriman`
+            `Data PO ${po_number} dan barang ${sku_name} tidak ditemukan`
           );
         }
-      }
 
-      const [err, resultLine] = await OpenQueryGetLineNum(po_number, sku_code);
-      if (!err) {
-        return errorResponse(req, res, "Gagal mendapatkan data line number");
-      }
+        let getSupplierId;
+        if (!supplier) {
+          //get supplier id
+          getSupplierId = await db.SUPPLIERS.findOne({
+            attributes: ["ref_id"],
+            where: { name: resultLine[0].VENDOR_NAME },
+            raw: true,
+          });
+        } else {
+          getSupplierId = await db.SUPPLIERS.findOne({
+            attributes: ["ref_id"],
+            where: { name: resultLine[0].VENDOR_NAME },
+            raw: true,
+          });
+        }
 
-      let getSupplierId;
-      if (!supplier) {
-        //get supplier id
-        getSupplierId = await db.SUPPLIERS.findOne({
-          attributes: ["ref_id"],
+        const getBuyerId = await db.USERS.findOne({
+          attributes: ["id"],
           raw: true,
-          where: { name: resultLine[0].VENDOR_NAME },
+          where: { oracle_username: resultLine[0].BUYER_NAME },
         });
-      } else {
-        //checking if supplier same with oracle
-        if (supplier.name !== resultLine[0].VENDOR_NAME) {
+
+        if (!getBuyerId) {
           return errorResponse(
             req,
             res,
-            `Supplier tidak sesuai dengan data Oracle, apabila terjadi kesalahan penginputan supplier silahkan retur ke PPIC`
+            `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
           );
         }
-      }
-
-      if (resultLine.length === 0) {
-        return errorResponse(
-          req,
-          res,
-          `Data PO ${po_number} dan barang ${sku_name} tidak ditemukan`
-        );
-      }
-
-      //get buyer id
-      const getBuyerId = await db.USERS.findOne({
-        attributes: ["id"],
-        raw: true,
-        where: { oracle_username: resultLine[0].BUYER_NAME },
-      });
-      if (!getBuyerId) {
-        return errorResponse(
-          req,
-          res,
-          `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
-        );
-      }
-
-      const getExistingHistory = await db.OFFERS.findOne({
-        where: { id },
-        raw: true,
-        attributes: ["history"],
-      });
-      const history = JSON.parse(getExistingHistory?.history);
-
-      await db.OFFERS.update(
-        {
-          submission_date,
-          supplier_id: supplier ? supplier.ref_id : getSupplierId.ref_id, //dicari dulu id nya sesuai
-          po_number,
-          po_qty: resultLine[0].QUANTITY,
-          po_outs: resultLine[0].QTY_OUTS,
-          sku_code,
-          sku_name,
-          line_num: resultLine[0].LINE_NUMBER,
-          qty_delivery,
-          est_delivery,
-          updated_by_id: userId,
-          updated_at: new Date(),
-          buyer_id: getBuyerId.id,
+        console.log(1085);
+        const getExistingHistory = await db.OFFERS.findOne({
+          where: { id },
+          raw: true,
+        });
+        const history = JSON.parse(getExistingHistory?.history);
+        const getNotes = JSON.parse(getExistingHistory?.notes);
+        console.log({
           history: JSON.stringify([
             ...(history || []),
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
-              )} Schedule Edited 
+              )} Schedule Force Edited by ${userName},
               changes :
-              ${
-                supplier ? `Supplier : "" -> ${resultLine[0].VENDOR_NAME} ` : ""
+              Supplier : ${
+                supplier
+                  ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                  : ""
+              }
+              - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                resultLine[0].PO_NUMBER
               }
               - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
               - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
@@ -677,19 +652,219 @@ export const PurchasingScheduleEdit = async (req, res) => {
               created_by: userName,
             },
           ]),
-        },
-        {
-          where: { id },
-        },
-        { transaction: dbTransaction }
-      );
+        });
+
+        await db.OFFERS.update(
+          {
+            submission_date,
+            supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty: Number(resultLine[0].QUANTITY),
+            sku_code,
+            sku_name,
+            line_num: Number(resultLine[0].LINE_NUMBER),
+            po_outs: parseFloat(resultLine[0].QTY_OUTS),
+            qty_delivery: Number(qty_delivery),
+            est_delivery: new Date(est_delivery),
+            updated_by_id: userId,
+            updated_at: new Date(),
+            buyer_id: getBuyerId.id,
+            history: JSON.stringify([
+              ...(history || []),
+              {
+                detail: `${moment().format(
+                  constant.FORMAT_DISPLAY_DATETIME
+                )} Schedule Force Edited by ${userName},
+                changes :
+                Supplier : ${
+                  supplier
+                    ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                    : ""
+                }
+                - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                  resultLine[0].PO_NUMBER
+                }
+                - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
+                - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
+                By ${userName} `,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            ]),
+            notes: JSON.stringify({
+              ...getNotes,
+              init: {
+                notes: notes,
+                created_at: new Date(),
+                created_by: userName,
+              },
+            }),
+            flag_status: "A",
+          },
+          {
+            where: { id },
+          }
+        );
+      }
+    } else {
+      for (let key in schedules) {
+        const {
+          id,
+          submission_date,
+          supplier_name,
+          po_number,
+          po_qty,
+          po_outs,
+          sku_code,
+          sku_name,
+          qty_delivery,
+          est_delivery,
+          io_filter,
+          category_filter,
+          supplier,
+        } = schedules[key];
+        if (po_number.substring(0, 2) === "PR") {
+          return errorResponse(
+            req,
+            res,
+            "Data PR tidak dapat diubah menjadi PR kembali, silahkan hubungi PPIC"
+          );
+        } else if (
+          po_number.substring(0, 2) === "PO" ||
+          po_number.substring(0, 2) === "PI"
+        ) {
+          const [err, resultLine] = await OpenQueryGetLineNum(
+            po_number,
+            sku_code
+          );
+          if (!err) {
+            return errorResponse(
+              req,
+              res,
+              "Gagal mendapatkan data line number"
+            );
+          }
+          if (resultLine.length === 0) {
+            return errorResponse(
+              req,
+              res,
+              `Data PO ${po_number} dan barang ${sku_name} tidak ditemukan`
+            );
+          }
+
+          let getSupplierId;
+          if (!supplier) {
+            //get supplier id
+            getSupplierId = await db.SUPPLIERS.findOne({
+              attributes: ["ref_id"],
+              where: { name: resultLine[0].VENDOR_NAME },
+              raw: true,
+            });
+          } else {
+            getSupplierId = await db.SUPPLIERS.findOne({
+              attributes: ["ref_id"],
+              where: { name: resultLine[0].VENDOR_NAME },
+              raw: true,
+            });
+          }
+          // else {
+          //   //checking if supplier same with oracle
+          //   if (supplier.name !== resultLine[0].VENDOR_NAME) {
+          //     return errorResponse(
+          //       req,
+          //       res,
+          //       `Supplier tidak sesuai dengan data Oracle, apabila terjadi kesalahan penginputan supplier silahkan retur ke PPIC`
+          //     );
+          //   }
+          // }
+
+          const getBuyerId = await db.USERS.findOne({
+            attributes: ["id"],
+            raw: true,
+            where: { oracle_username: resultLine[0].BUYER_NAME },
+          });
+
+          if (!getBuyerId) {
+            return errorResponse(
+              req,
+              res,
+              `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
+            );
+          }
+          console.log(1085);
+          const getExistingHistory = await db.OFFERS.findOne({
+            where: { id },
+            raw: true,
+          });
+          console.log(1090);
+          const history = JSON.parse(getExistingHistory?.history);
+          console.log({
+            submission_date: new Date(submission_date),
+            supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
+            po_number,
+            po_qty: Number(resultLine[0].QUANTITY),
+            po_outs: Number(resultLine[0].QTY_OUTS),
+            sku_code,
+            sku_name,
+            line_num: Number(resultLine[0].LINE_NUMBER),
+            qty_delivery: Number(resultLine[0].QTY_OUTS),
+            est_delivery: new Date(est_delivery),
+            updated_by_id: Number(userId),
+            updated_at: new Date(),
+            buyer_id: getBuyerId.id,
+          });
+
+          await db.OFFERS.update(
+            {
+              submission_date,
+              supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
+              po_number,
+              po_qty: Number(resultLine[0].QUANTITY),
+              sku_code,
+              sku_name,
+              line_num: Number(resultLine[0].LINE_NUMBER),
+              po_outs: parseFloat(resultLine[0].QTY_OUTS),
+              qty_delivery: Number(resultLine[0].QTY_OUTS),
+              est_delivery: new Date(est_delivery),
+              updated_by_id: userId,
+              updated_at: new Date(),
+              buyer_id: getBuyerId.id,
+              history: JSON.stringify([
+                ...(history || []),
+                {
+                  detail: `${moment().format(
+                    constant.FORMAT_DISPLAY_DATETIME
+                  )} Schedule Edited by ${userName},
+                  changes :
+                  Supplier : ${
+                    supplier
+                      ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
+                      : ""
+                  }
+                  - Updating PO Number : ${getExistingHistory?.po_number} -> ${
+                    resultLine[0].PO_NUMBER
+                  }
+                  - Updating PO Quantity : ${po_qty} -> ${
+                    resultLine[0].QUANTITY
+                  }
+                  - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
+                  By ${userName} `,
+                  created_at: new Date(),
+                  created_by: userName,
+                },
+              ]),
+            },
+            {
+              where: { id },
+            }
+          );
+        }
+      }
     }
     //check if name is exist
 
-    await dbTransaction.commit();
     return successResponse(req, res, "Success Insert Data Jadwal Pengiriman");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -764,7 +939,6 @@ export const PurchasingScheduleRetur = async (req, res) => {
 };
 
 export const PurchasingScheduleSendToSupplier = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
   try {
     const { rq_body } = req.body;
     const userName = getUserName(req);
@@ -777,7 +951,7 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
       );
     }
     //check if id ship is exist
-
+    let supplierId = [];
     for (let key in rq_body) {
       let rowToUpdate = rq_body[key];
       //check id for supplier
@@ -805,18 +979,40 @@ export const PurchasingScheduleSendToSupplier = async (req, res) => {
         },
         {
           where: { id },
-        },
-        { transaction: dbTransaction }
+        }
       );
+
+      supplierId.push(rowToUpdate.supplier.ref_id);
     }
-    await dbTransaction.commit();
+    const uniqueSupplierId = [...new Set(supplierId)];
+    console.log(uniqueSupplierId);
+    let supplierEmail = await db.USERS.findAll({
+      where: {
+        supplier_id: uniqueSupplierId,
+      },
+      attributes: ["email"],
+      raw: true,
+    });
+    if (!supplierEmail) {
+      supplierEmail = await db.SUPPLIERS.findAll({
+        where: {
+          ref_id: uniqueSupplierId,
+        },
+        attributes: ["email"],
+        raw: true,
+      });
+    }
+    await sendEmailNotificationProcSupplier(
+      "BKP - Jadwal Pengiriman Barang",
+      "New Schedule has been submitted, please check to your account",
+      supplierEmail.map((item) => item.email)
+    );
     return successResponse(
       req,
       res,
       "Sukses Memberikan Jadwal Pengiriman kepada Supplier"
     );
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -826,6 +1022,7 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let ppicEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -837,9 +1034,19 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -870,14 +1077,17 @@ export const PurchasingScheduleAcceptSplitSupplier = async (req, res) => {
         },
         {
           where: { id: checkAnotherSplit[key].id },
-        },
-        { transaction: dbTransaction }
+        }
       );
+      ppicEmail.push(checkAnotherSplit[key].crtd_by?.email);
     }
-    await dbTransaction.commit();
+    await sendEmailNotificationProcPPICSplit(
+      "BKP - Schedule Split Request",
+      `New Schedule Split Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(ppicEmail)]
+    );
     return successResponse(req, res, "Split Request Accepted");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -887,6 +1097,7 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -898,9 +1109,19 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -932,32 +1153,33 @@ export const PurchasingScheduleRejectSplitSupplier = async (req, res) => {
       },
       {
         where: { id: checkTheCurrentID.split_from_id },
-      },
-      { transaction: dbTransaction }
+      }
     );
+
+    supplierEmail.push(checkTheCurrentID?.user_supplier?.email);
 
     //delete the splitted data
     for (let key in checkAnotherSplit) {
-      await db.OFFERS.destroy(
-        {
-          where: { id: checkAnotherSplit[key].id },
-        },
-        { transaction: dbTransaction }
-      );
+      await db.OFFERS.destroy({
+        where: { id: checkAnotherSplit[key].id },
+      });
     }
-    await dbTransaction.commit();
+    await sendEmailNotificationProcSupplier(
+      "BKP - Schedule Split Request [Rejected]",
+      `Split Request Rejected by Procurement ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
 export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
   try {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let ppicEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -969,9 +1191,19 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1004,14 +1236,17 @@ export const PurchasingScheduleAcceptEditSupplier = async (req, res) => {
         },
         {
           where: { id: checkAnotherEditedOffer[key].id, is_edit: false },
-        },
-        { transaction: dbTransaction }
+        }
       );
+      ppicEmail.push(checkAnotherEditedOffer[key].crtd_by?.email);
     }
-    await dbTransaction.commit();
+    await sendEmailNotificationProcPPICEdit(
+      "BKP - Schedule Edit Request",
+      `New Schedule Edit Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(ppicEmail)]
+    );
     return successResponse(req, res, "Split Request Rejected");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1021,6 +1256,7 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1032,9 +1268,19 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1074,17 +1320,19 @@ export const PurchasingScheduleRejectEditSupplier = async (req, res) => {
         { transaction: dbTransaction }
       );
       //delete the splitted data
-      await db.OFFERS.destroy(
-        {
-          where: { id: checkAnotherEditedOffer[key].dataValues.id },
-        },
-        { transaction: dbTransaction }
-      );
+      await db.OFFERS.destroy({
+        where: { id: checkAnotherEditedOffer[key].dataValues.id },
+      });
+      supplierEmail.push(checkAnotherEditedOffer[key].user_supplier?.email);
     }
-    await dbTransaction.commit();
-    return successResponse(req, res, "Split Request Rejected");
+
+    await sendEmailNotificationProcSupplier(
+      "BKP - Schedule Edit Request [Rejected]",
+      `Edit Request Rejected by Procurement ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
+    return successResponse(req, res, "Edit Request Rejected");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1094,6 +1342,7 @@ export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let ppicEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1105,9 +1354,19 @@ export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1132,13 +1391,17 @@ export const PurchasingScheduleAcceptClosePOSupplier = async (req, res) => {
       },
       {
         where: { id },
-      },
-      { transaction: dbTransaction }
+      }
     );
-    await dbTransaction.commit();
-    return successResponse(req, res, "Split Request Rejected");
+    ppicEmail.push(checkTheCurrentID?.crtd_by?.email);
+    await sendEmailNotificationProcPPICClosePO(
+      "BKP - Schedule Close PO Request",
+      `New Close PO Request Submitted by Supplier ${userName}, please check to your account`,
+      [...new Set(ppicEmail)]
+    );
+
+    return successResponse(req, res, "Close PO Request Approved");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -1148,6 +1411,7 @@ export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
     const { id } = req.body.rq_body;
     const userName = getUserName(req);
     const userId = getUserID(req);
+    let supplierEmail = [];
     if (!userId) {
       return errorResponseUnauthorized(
         req,
@@ -1159,9 +1423,19 @@ export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
       where: { id },
       include: [
         {
+          model: db.USERS,
+          as: "crtd_by",
+          attributes: ["id", "name", "email"],
+        },
+        {
           model: db.SUPPLIERS,
           as: "supplier",
-          attributes: ["id", "ref_id", "name"],
+          attributes: ["id", "ref_id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "user_supplier",
+          attributes: ["supplier_id", "name", "email"],
         },
       ],
     });
@@ -1187,13 +1461,17 @@ export const PurchasingScheduleRejectClosePOSupplier = async (req, res) => {
       },
       {
         where: { id },
-      },
-      { transaction: dbTransaction }
+      }
     );
-    await dbTransaction.commit();
+    supplierEmail.push(checkTheCurrentID?.user_supplier?.email);
+
+    await sendEmailNotificationProcSupplier(
+      "BKP - Schedule Close PO Request [Rejected]",
+      `Close PO Request Rejected by Procurement ${userName}, please check to your account and resubmit the request if necessary`,
+      [...new Set(supplierEmail)]
+    );
     return successResponse(req, res, "Close PO Request Rejected");
   } catch (error) {
-    await dbTransaction.rollback();
     return errorResponse(req, res, error.message);
   }
 };

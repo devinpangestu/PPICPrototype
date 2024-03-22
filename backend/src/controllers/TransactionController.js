@@ -157,7 +157,7 @@ export const TransactionPOList = async (req, res) => {
             {
               model: db.SUPPLIERS,
               as: "supplier",
-              attributes: ["ref_id", "name"],
+              attributes: ["ref_id", "name", "email"],
             },
           ],
           where: {

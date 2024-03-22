@@ -37,8 +37,10 @@ import {
   dailyJobScheduleCheckTodayDeliveryDateAndOutstanding,
   dailyJobSupplierRefreshSupplier,
   dailyJobSupplierValidityCheck,
-  dailyJobUpdatePOOutstanding,
   dailyJobSupplierRefreshSupplierUser,
+  hourlyJobUpdatePOOutstanding,
+  hourlyJobUpdateColumnHistoryPOOuts,
+  hourlyJobUpdateColumnChangesPOOuts,
 } from "./middlewares/cronjobs.js";
 import { dynamicRateLimit } from "./middlewares/requestHandling.js";
 
@@ -49,7 +51,9 @@ app.use(cookieParser());
 
 app.use(
   bodyParser.urlencoded({
+    limit: "50mb",
     extended: true,
+    parameterLimit: 50000,
   })
 );
 
@@ -94,10 +98,9 @@ app.use(session);
 
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "50mb" }));
 const currVer = "/v1";
 
-app.use(express.json());
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
@@ -168,5 +171,7 @@ dailyJobSupplierValidityCheck();
 dailyJobSupplierRefreshSupplier();
 dailyJobSupplierRefreshSupplierUser();
 dailyJobScheduleCheckTodayDeliveryDateAndOutstanding();
-dailyJobUpdatePOOutstanding();
+hourlyJobUpdatePOOutstanding();
+hourlyJobUpdateColumnHistoryPOOuts();
+hourlyJobUpdateColumnChangesPOOuts();
 export default app;

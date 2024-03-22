@@ -109,6 +109,14 @@ module.exports = {
       updated_at: { defaultValue: null, type: Sequelize.DATE },
       deleted_by_id: { defaultValue: null, type: Sequelize.NUMERIC },
       deleted_at: { defaultValue: null, type: Sequelize.DATE },
+      po_outs_history: {
+        defaultValue: JSON.stringify([]),
+        type: Sequelize.TEXT,
+      },
+      po_outs_changes: {
+        defaultValue: JSON.stringify([]),
+        type: Sequelize.TEXT,
+      },
     });
   },
   async down(queryInterface, Sequelize) {

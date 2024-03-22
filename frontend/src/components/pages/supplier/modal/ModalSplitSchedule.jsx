@@ -246,14 +246,14 @@ function ModalSplitSchedule(props) {
                                 label={t("notes")}
                                 rules={[
                                   {
-                                    required: true,
+                                    // required: true,
                                     message: `${t("input")} ${t("notes")}`,
                                   },
-                                  {
-                                    type: "string",
-                                    min: 6,
-                                    message: t("Notes must be at least 6 characters"),
-                                  },
+                                  // {
+                                  //   type: "string",
+                                  //   min: 6,
+                                  //   message: t("Notes must be at least 6 characters"),
+                                  // },
                                 ]}
                                 labelCol={{ span: labelColSpan }} // Set the width of the label column
                                 wrapperCol={{ span: 11 }}
