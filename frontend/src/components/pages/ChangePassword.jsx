@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import handler from "handler";
 import errors from "errors";
 import constant from "constant";
+import moment from "moment";
 
 const ChangePassword = (props) => {
   const [t] = useTranslation();
@@ -106,7 +107,17 @@ const ChangePassword = (props) => {
   };
 
   return (
-    <PageContainer title={t("changePassword")}>
+    <PageContainer
+      title={`${t("changePassword")} ${
+        !utils.getUserInfo().password_changed
+          ? "for new User"
+          : moment(utils.getUserInfo().password_changed)
+              .add(90, "days")
+              .format(constant.FORMAT_API_DATE) < moment().format(constant.FORMAT_API_DATE)
+          ? ""
+          : "(Password Expired)"
+      }`}
+    >
       <SyncOverlay loading={pageLoading} />
       <Row>
         <Col xs={{ span: 24 }} md={{ span: 24 }} lg={{ span: 24 }} xl={{ span: 24 }}>

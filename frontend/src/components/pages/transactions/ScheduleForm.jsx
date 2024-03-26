@@ -119,7 +119,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     let modalConfirmObj = {};
     if (autoFill) {
       modalConfirmObj = {
-        po_number: values.po_number,
+        po_number: utils.removeNonPrintableCharacters(values.po_number),
         line_num: values.line_num,
         auto_fill: true,
       };
@@ -134,11 +134,11 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
           ref_id: values.supplier_name,
           name: suppliers.find((sup) => sup.value === values.supplier_name).label,
         },
-        po_number: values.po_number,
+        po_number: utils.removeNonPrintableCharacters(values.po_number),
         po_qty: parseInt(values.po_qty),
         po_outs: parseInt(values.po_outs),
-        sku_code: values.sku_code,
-        sku_name: values.sku_name,
+        sku_code: utils.removeNonPrintableCharacters(values.sku_code),
+        sku_name: utils.removeNonPrintableCharacters(values.sku_name),
         qty_delivery: parseInt(values.qty_delivery),
         est_delivery: moment(values.est_delivery).format(constant.FORMAT_API_DATE),
         notes: values.notes,
@@ -165,11 +165,15 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
             modalConfirmObj.submission_date = moment(values.submission_date);
             modalConfirmObj.io_filter = values.io_filter;
             modalConfirmObj.category_filter = values.category_filter;
-            modalConfirmObj.po_number = values.po_number;
+            modalConfirmObj.po_number = utils.removeNonPrintableCharacters(values.po_number);
             modalConfirmObj.po_qty = response.data.rs_body.QUANTITY;
             modalConfirmObj.po_outs = response.data.rs_body.QTY_OUTS;
-            modalConfirmObj.sku_code = response.data.rs_body.KODE_SKU;
-            modalConfirmObj.sku_name = response.data.rs_body.NAMA_SKU;
+            modalConfirmObj.sku_code = utils.removeNonPrintableCharacters(
+              response.data.rs_body.KODE_SKU,
+            );
+            modalConfirmObj.sku_name = utils.removeNonPrintableCharacters(
+              response.data.rs_body.NAMA_SKU,
+            );
             modalConfirmObj.line_num = response.data.rs_body.LINE_NUM;
             modalConfirmObj.supplier_name = response.data.rs_body.VENDOR_NAME;
             modalConfirmObj.qty_delivery = parseInt(values.qty_delivery);

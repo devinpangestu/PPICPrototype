@@ -995,7 +995,15 @@ export const PPICScheduleEdit = async (req, res) => {
         console.log(1085);
         const getExistingHistory = await db.OFFERS.findOne({
           where: { id },
-          raw: true,
+          include: [
+            {
+              model: db.SUPPLIERS,
+              as: "supplier",
+              attributes: ["id", "ref_id", "name", "email"],
+              
+            },
+          ],
+          
         });
         const history = JSON.parse(getExistingHistory?.history);
         const getNotes = JSON.parse(getExistingHistory?.notes);
@@ -1005,7 +1013,7 @@ export const PPICScheduleEdit = async (req, res) => {
             {
               detail: `${moment().format(
                 constant.FORMAT_DISPLAY_DATETIME
-              )} Schedule Force Edited by ${userName},
+              )} Schedule <b>Force Edited</b> by ${userName},
               changes :
               Supplier : ${
                 supplier
@@ -1023,6 +1031,48 @@ export const PPICScheduleEdit = async (req, res) => {
             },
           ]),
         });
+        console.log(getExistingHistory);
+        const changesSentences = `
+${
+  getExistingHistory?.supplier?.name === resultLine[0].VENDOR_NAME
+    ? ""
+    : `- Updating Supplier : ${
+        supplier
+          ? ` ${getExistingHistory?.supplier?.name ?? ""} -> ${
+              resultLine[0].VENDOR_NAME
+            } `
+          : ""
+      }`
+}
+${
+  getExistingHistory?.po_number === resultLine[0].PO_NUMBER
+    ? ""
+    : `- Updating PO Number : ${getExistingHistory?.po_number} -> ${resultLine[0].PO_NUMBER}`
+}
+${
+  getExistingHistory?.po_qty === resultLine[0].QUANTITY
+    ? ""
+    : `- Updating PO Quantity : ${getExistingHistory?.po_qty} -> ${resultLine[0].QUANTITY}`
+}
+${
+  getExistingHistory?.po_outs === resultLine[0].QTY_OUTS
+    ? ""
+    : `- Updating PO Outs : ${getExistingHistory?.po_outs} -> ${resultLine[0].QTY_OUTS}`
+}
+${
+  moment(getExistingHistory?.est_delivery).format(constant.FORMAT_DATE_API) ===
+  est_delivery
+    ? ""
+    : `- Updating PO Delivery Date : ${moment(
+        getExistingHistory?.est_delivery
+      ).format(constant.FORMAT_DATE_API)} -> ${est_delivery}`
+}
+${
+  getExistingHistory?.qty_delivery === qty_delivery
+    ? ""
+    : `- Updating PO Delivery Quantity : ${getExistingHistory?.qty_delivery} -> ${qty_delivery}`
+}
+By ${userName} and reset the status to schedule initialization`;
 
         await db.OFFERS.update(
           {
@@ -1046,17 +1096,7 @@ export const PPICScheduleEdit = async (req, res) => {
                   constant.FORMAT_DISPLAY_DATETIME
                 )} Schedule Force Edited by ${userName},
                 changes :
-                Supplier : ${
-                  supplier
-                    ? ` ${supplier.name} -> ${resultLine[0].VENDOR_NAME} `
-                    : ""
-                }
-                - Updating PO Number : ${getExistingHistory?.po_number} -> ${
-                  resultLine[0].PO_NUMBER
-                }
-                - Updating PO Quantity : ${po_qty} -> ${resultLine[0].QUANTITY}
-                - Updating PO Outs : ${po_outs} -> ${resultLine[0].QTY_OUTS}
-                By ${userName} `,
+                ${changesSentences}`,
                 created_at: new Date(),
                 created_by: userName,
               },
@@ -1069,6 +1109,10 @@ export const PPICScheduleEdit = async (req, res) => {
                 created_by: userName,
               },
             }),
+            send_supplier_date: null,
+            supplier_confirm_date: null,
+            submitted_qty: null,
+            est_submitted_date: null,
             flag_status: "A",
           },
           {
@@ -1192,28 +1236,13 @@ export const PPICScheduleEdit = async (req, res) => {
               `Buyer tidak terdaftar dalam sistem, mohon cek kembali`
             );
           }
-          console.log(1085);
+          
           const getExistingHistory = await db.OFFERS.findOne({
             where: { id },
             raw: true,
           });
-          console.log(1090);
+          
           const history = JSON.parse(getExistingHistory?.history);
-          console.log({
-            submission_date: new Date(submission_date),
-            supplier_id: getSupplierId?.ref_id, //dicari dulu id nya sesuai
-            po_number,
-            po_qty: Number(resultLine[0].QUANTITY),
-            po_outs: Number(resultLine[0].QTY_OUTS),
-            sku_code,
-            sku_name,
-            line_num: Number(resultLine[0].LINE_NUMBER),
-            qty_delivery: Number(resultLine[0].QTY_OUTS),
-            est_delivery: new Date(est_delivery),
-            updated_by_id: Number(userId),
-            updated_at: new Date(),
-            buyer_id: getBuyerId.id,
-          });
 
           await db.OFFERS.update(
             {
@@ -1225,7 +1254,7 @@ export const PPICScheduleEdit = async (req, res) => {
               sku_name,
               line_num: Number(resultLine[0].LINE_NUMBER),
               po_outs: parseFloat(resultLine[0].QTY_OUTS),
-              qty_delivery: Number(resultLine[0].QTY_OUTS),
+              qty_delivery: Number(qty_delivery),
               est_delivery: new Date(est_delivery),
               updated_by_id: userId,
               updated_at: new Date(),

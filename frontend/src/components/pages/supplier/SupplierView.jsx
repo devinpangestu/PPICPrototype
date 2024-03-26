@@ -68,9 +68,12 @@ const SupplierView = (props) => {
           <p style={{ margin: 0, fontSize: "1rem" }}>
             {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.init?.created_by} : ${
-              JSON.parse(record.notes)?.init?.notes
-            }`}
+            )}`}
+            <strong>
+              {`${JSON.parse(record.notes)?.init?.created_by} : ${
+                JSON.parse(record.notes)?.init?.notes
+              }`}
+            </strong>
           </p>
         );
       }

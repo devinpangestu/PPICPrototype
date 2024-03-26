@@ -11,6 +11,7 @@ import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { Form, Input, Button, Image, Card } from "antd";
 import { Encrypt } from "utils/encryption";
 import ReCAPTCHA from "react-google-recaptcha";
+import moment from "moment";
 
 function Login(props) {
   const [t] = useTranslation();
@@ -64,6 +65,12 @@ function Login(props) {
   const redirectLogin = (setLoginAttempts) => {
     let redirectTo = "/ppic/dashboard";
     if (!utils.getUserInfo().password_changed) {
+      redirectTo = "/change-password";
+    } else if (
+      moment(utils.getUserInfo().password_changed)
+        .add(90, "days")
+        .format(constant.FORMAT_API_DATE) < moment().format(constant.FORMAT_API_DATE)
+    ) {
       redirectTo = "/change-password";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 2)) {
       redirectTo = "/ppic/dashboard";

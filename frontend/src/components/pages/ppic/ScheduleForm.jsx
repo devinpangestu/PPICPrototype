@@ -488,6 +488,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                         disabled={disableRefreshPOPR}
                       />
                     }
+                    onPressEnter={handleRefreshPOPR}
                   />
                 </Form.Item>
               </Col>
@@ -892,7 +893,6 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                       setDisableSubmit(true);
                     }
                   }}
-                  picker="month"
                 />
               </Form.Item>
             </Col>

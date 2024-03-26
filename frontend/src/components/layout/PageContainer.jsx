@@ -36,6 +36,7 @@ import logo from "assets/images/logo_bkp.png";
 import handler from "handler";
 import constant from "constant";
 import { api } from "api";
+import moment from "moment";
 
 export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction, children }) => {
   const [t] = useTranslation();
@@ -281,7 +282,20 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
       {siderContent}
     </Layout.Sider>
   );
-
+  const itemsDropdown = [
+    {
+      label: <Link to={"/change-password"}>{t("changePassword")}</Link>,
+      key: "menu-changePwd",
+    },
+    {
+      label: (
+        <>
+          {t("use")} <strong onClick={handleChangeLang}>{otherLang.label}</strong>
+        </>
+      ),
+      key: "menu-changeLang",
+    },
+  ];
   let layoutWrapperCls = "layout-wrapper";
 
   useEffect(() => {
@@ -384,21 +398,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                   {userInfo.user_name}
                 </Button>
               </Popover>
-              <Dropdown
-                trigger={["click"]}
-                overlay={
-                  <Menu>
-                    <Menu.Item key="menu-changePwd">
-                      <Link to={"/change-password"}>{t("changePassword")}</Link>
-                    </Menu.Item>
-                    <Menu.Item key="menu-changeLang" onClick={handleChangeLang}>
-                      {t("use")} <strong>{otherLang.label}</strong>
-                    </Menu.Item>
-                  </Menu>
-                }
-                placement="bottomLeft"
-                arrow
-              >
+              <Dropdown trigger={["click"]} menu={{ itemsDropdown }} placement="bottomLeft" arrow>
                 <Button className="mr-2" icon={<SettingOutlined />} />
               </Dropdown>
               <Button
@@ -417,7 +417,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             </Col>
           </Row>
           <Layout.Content className="mx-4 px-5 py-4 mb-4 layout-content">
-            {userInfo.password_changed === false && (
+            {userInfo.password_changed === false ? (
               <Alert
                 className="mb-5"
                 message={
@@ -431,7 +431,10 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                 type="warning"
                 showIcon
               />
-            )}
+            ) : moment(userInfo.password_changed).add(90, "days").format(constant.FORMAT_API_DATE) <
+              moment().format(constant.FORMAT_API_DATE) ? (
+              <Alert className="mb-5" message={t("alertPwdExp")} type="warning" showIcon />
+            ) : null}
             {title && (
               <SectionHeading
                 size={4}

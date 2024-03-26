@@ -195,6 +195,7 @@ export const id = {
     newPasswordConfirm: "Konfirmasi password baru",
     changeYourPassword: "ganti password anda",
     alertChPwd: "Password anda masih password default. Silahkan",
+    alertPwdExp: "Password anda telah kadaluarsa. Silahkan ganti password anda",
     waitingForDelivery: "Menunggu pengiriman",
     seeDetails: "Lihat Detail",
     useAsDraft: "Gunakan sebagai draft",

@@ -200,6 +200,7 @@ export const en = {
     newPasswordConfirm: "Confirm new password",
     changeYourPassword: "change your password",
     alertChPwd: "Your password is still default password. Please",
+    alertPwdExp: "Your password has expired. Please change it",
     waitingForDelivery: "Waiting for delivery",
     seeDetails: "See Details",
     useAsDraft: "Use As Draft",

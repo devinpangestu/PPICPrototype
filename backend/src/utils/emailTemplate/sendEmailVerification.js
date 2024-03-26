@@ -18,7 +18,7 @@ export const sendEmailVerification = async (email, subject, password) => {
       //   ciphers: "SSLv3",
       // },
     });
-  
+
     const mailOptions = {
       from: `PT. Bina Karya Prima - PPIC <${env.EMAIL_USERNAME}>`,
       to: email,
@@ -162,7 +162,7 @@ export const sendEmailVerification = async (email, subject, password) => {
       <tr>
       <td class="pad" style="padding-bottom:25px;padding-top:22px;width:100%;padding-right:0px;padding-left:0px;">
       <div align="center" class="alignment" style="line-height:10px">
-      <div style="max-width: 201.25px;"><img alt="I'm an image" src="cid:header_img" style="display: block; height: auto; border: 0; width: 100%;" title="I'm an image" width="201.25"/></div>
+      <div style="max-width: 201.25px;"><img alt="Bina Karya Prima" src="cid:header_img" style="display: block; height: auto; border: 0; width: 100%;" title="Bina Karya Prima" width="201.25"/></div>
       </div>
       </td>
       </tr>
@@ -187,7 +187,7 @@ export const sendEmailVerification = async (email, subject, password) => {
       <tr>
       <td class="pad" style="padding-left:40px;padding-right:40px;width:100%;">
       <div align="center" class="alignment" style="line-height:10px">
-      <div class="fullWidth" style="max-width: 316.25px;"><img alt="I'm an image" src="cid:add_img" style="display: block; height: auto; border: 0; width: 100%;" title="I'm an image" width="316.25"/></div>
+      <div class="fullWidth" style="max-width: 316.25px;"><img alt="@" src="cid:add_img" style="display: block; height: auto; border: 0; width: 100%;" title="@" width="316.25"/></div>
       </div>
       </td>
       </tr>

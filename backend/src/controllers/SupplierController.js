@@ -388,7 +388,14 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
         exclude: ["id"],
       },
     });
-
+    const seenDates = schedules.reduce((acc, { est_delivery }) => {
+      if (acc[est_delivery]) {
+        throw new Error(`Duplicate est_delivery date found: ${est_delivery}`);
+      }
+      acc[est_delivery] = true;
+      return acc;
+    }, {});
+    console.log(seenDates);
     const totalQuantitySplitted = schedules.reduce((total, obj) => {
       return total + Number(obj.qty_delivery);
     }, 0);
@@ -493,9 +500,9 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
         };
       }
       buyerEmail.push(offerToSplitted.buyer?.email);
-      await db.OFFERS.create(payloadForSplittedSchedule, {
-        transaction: dbTransaction,
-      });
+      // await db.OFFERS.create(payloadForSplittedSchedule, {
+      //   transaction: dbTransaction,
+      // });
     }
 
     //update original schedule
@@ -515,18 +522,18 @@ export const SupplierScheduleSplitSupplier = async (req, res) => {
       ]),
       is_split: true,
     };
-    await db.OFFERS.update(
-      payloadForOriginalSchedule,
-      {
-        where: { id: offer_id },
-      },
-      { transaction: dbTransaction }
-    );
-    await sendEmailNotificationSupplierProcSplit(
-      "BKP - Schedule Split Request",
-      `New Schedule Split Request Submitted by Supplier ${userName}, please check to your account`,
-      [...new Set(buyerEmail)]
-    );
+    // await db.OFFERS.update(
+    //   payloadForOriginalSchedule,
+    //   {
+    //     where: { id: offer_id },
+    //   },
+    //   { transaction: dbTransaction }
+    // );
+    // await sendEmailNotificationSupplierProcSplit(
+    //   "BKP - Schedule Split Request",
+    //   `New Schedule Split Request Submitted by Supplier ${userName}, please check to your account`,
+    //   [...new Set(buyerEmail)]
+    // );
     await dbTransaction.commit();
 
     return successResponse(req, res, "Schedule splitted");

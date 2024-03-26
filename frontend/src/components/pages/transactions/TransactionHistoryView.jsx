@@ -606,6 +606,9 @@ const Transaction = (props) => {
         }}
         onSuccess={() => {
           setModalEditShow(false);
+          //load the same data with new edited
+          console.log("onsuccess run");
+          loadAllPOInRange();
           message.success("Success Edit Data");
         }}
         id={modalEditData}

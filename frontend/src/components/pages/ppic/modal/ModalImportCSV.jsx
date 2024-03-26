@@ -77,6 +77,7 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
 
       reader.onloadend = (e) => {
         const rows = CSV.parse(e.target.result);
+
         for (const r of rows) {
           if (r.every((value) => value === "")) {
             continue;
@@ -84,6 +85,18 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
           // if (tempMassCreateFileContent.find((el) => el.po_number === r[4])) {
           //   continue;
           // }
+          if (!sendToApiFormat(r[2])) {
+            utils.swal.Error({ msg: "Invalid CSV Format on Column 2 expected 'Submission Date'" });
+            setIsUploading(false);
+            return;
+          }
+          if (!sendToApiFormat(r[10])) {
+            utils.swal.Error({
+              msg: "Invalid CSV Format on Column 2 expected 'Est Delivery Date'",
+            });
+            setIsUploading(false);
+            return;
+          }
           tempMassCreateFileContent.push({
             io_filter: r[0],
             category_filter: r[1],
@@ -98,6 +111,7 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
             est_delivery: sendToApiFormat(r[10]),
             notes_ppic: r[11],
           });
+          console.log("tempMassCreateFileContent", tempMassCreateFileContent);
         }
         setMassCreateFileContent(tempMassCreateFileContent);
         setPreviewRowChecked(new Array(tempMassCreateFileContent.length).fill(true));

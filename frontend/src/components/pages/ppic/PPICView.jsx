@@ -283,7 +283,10 @@ const PPICView = (props) => {
   }
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
-      if (record.flag_status === constant.FLAG_STATUS_PPIC_INIT) {
+      if (
+        record.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+        record.flag_status === constant.FLAG_STATUS_SUPPLIER
+      ) {
         return (
           <p style={{ margin: 0, fontSize: "1rem" }}>
             {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
@@ -318,9 +321,13 @@ const PPICView = (props) => {
           <p style={{ margin: 0, fontSize: "1rem" }}>
             {`${moment(JSON.parse(record.notes)?.retur?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.retur?.created_by} : ${
-              JSON.parse(record.notes)?.retur?.notes
-            }`}
+            )}`}
+            <strong>
+              {" "}
+              {`${JSON.parse(record.notes)?.retur?.created_by} : ${
+                JSON.parse(record.notes)?.retur?.notes
+              }`}
+            </strong>
           </p>
         );
       }
@@ -630,7 +637,6 @@ const PPICView = (props) => {
   };
 
   const onResetFilter = async () => {
-    setPageLoading(true);
     setFilterValue({
       supplier_id: null,
       user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
@@ -1471,7 +1477,6 @@ const PPICView = (props) => {
             ...constant.MODAL_CONFIRM_DEFAULT_PROPS,
             content: text,
             onOk: () => {
-              setPageLoading(true);
               api(row.id)
                 .then((res) => {
                   message.success("Success");
@@ -1480,7 +1485,6 @@ const PPICView = (props) => {
                   utils.swal.Error({ msg: utils.getErrMsg(err) });
                 })
                 .finally(() => {
-                  setPageLoading(false);
                   loadOffers();
                   const otherParams = {
                     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
@@ -1835,7 +1839,6 @@ const PPICView = (props) => {
                                   previewRowChecked.filter((item) => item).length
                                 } out of ${previewRowChecked.length} data to be sent.}`,
                                 onOk: () => {
-                                  setPageLoading(true);
                                   const data = offers.filter(
                                     (offer, index) => previewRowChecked[index],
                                   );
@@ -1886,7 +1889,7 @@ const PPICView = (props) => {
                         >
                           Change to Edit Mode
                         </Button>
-                        <Button
+                        {/* <Button
                           type="primary"
                           onClick={() => {
                             Modal.confirm({
@@ -1933,7 +1936,7 @@ const PPICView = (props) => {
                           }}
                         >
                           Refresh Outstanding PO
-                        </Button>
+                        </Button> */}
                       </>,
                       "ppic@edit",
                     )}
@@ -1972,7 +1975,7 @@ const PPICView = (props) => {
                           utils.swal.Error({ msg: utils.getErrMsg(err) });
                         })
                         .finally(() => {
-                          setPageLoading(false);
+                          loadOffers();
                         });
                     }}
                   >
@@ -2264,7 +2267,8 @@ const PPICView = (props) => {
 
       <SyncOverlay loading={pageLoading} />
       <Row gutter={16}>
-        {userInfo.role.id === 1 && (
+        {(userInfo.role.id === constant.ROLE_SUPER_ADMIN ||
+          userInfo.role.id === constant.ROLE_PPIC) && (
           <Col xs={24} lg={24} xl={24}>
             <Card size="small">
               <SectionHeading title={"Filter"} withDivider />
@@ -2375,12 +2379,3 @@ const PPICView = (props) => {
 };
 
 export default withRouter(PPICView);
-
-// ppictest
-// proctest1
-// proctest2
-// proctest3
-// proctest4
-// proctest5
-// procadmin
-// qaqctest

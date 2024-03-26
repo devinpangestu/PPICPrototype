@@ -129,3 +129,7 @@ export const sendToApiFormat = (inputDate) => {
     return null;
   }
 };
+
+export const removeNonPrintableCharacters = (str) => {
+  return str.replace(/[^\x20-\x7E]/g, ""); // Removes all non-printable ASCII characters
+};

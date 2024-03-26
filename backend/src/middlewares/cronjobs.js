@@ -12,7 +12,7 @@ import { constant } from "../constant/index.js";
 
 export const dailyJobSupplierValidityCheck = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -91,7 +91,7 @@ export const dailyJobSupplierRefreshSupplier = () => {
 };
 export const dailyJobSupplierRefreshSupplierUser = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -107,7 +107,7 @@ export const dailyJobSupplierRefreshSupplierUser = () => {
           where: {
             deleted_at: null,
             password_changed_at: null,
-            role_id: 4,
+            role_id: 5,
           },
           raw: true,
         });
@@ -191,10 +191,51 @@ export const dailyJobSupplierRefreshSupplierUser = () => {
     true
   );
 };
+export const dailyJobClearTokenDB = () => {
+  new CronJob(
+    "0 0 0 * * *",
+    //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
+    async () => {
+      const tNow = new Date();
+      const dateNow = tNow.toISOString().split("T")[0];
+      const timeNow = tNow.toISOString().split("T")[1].split(".")[0];
+      console.log(`[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} START`);
+
+      try {
+        // CHECK FOR USER THAT NOT LOGIN UNTIL MIDNIGHT
+        const allToken = await db.TOKEN.findAll({
+          where: {
+            expired_at: { [Op.lte]: new Date() },
+          },
+          raw: true,
+        });
+        if (allToken.length === 0) {
+          console.log(
+            `[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} No Token to deleted today, seems like this website not active.`
+          );
+        }
+        for (let key in allToken) {
+          await db.TOKEN.destroy({
+            where: {
+              id: allToken[key].id,
+            },
+          });
+        }
+        console.log(
+          `[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} SUCCESSFULY CLEAN TOKEN DATA.`
+        );
+      } catch (err) {
+        console.log(err);
+      }
+    },
+    null,
+    true
+  );
+};
 
 export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -206,8 +247,9 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
 
       try {
         // Fetch data from DB
-        const offers = await db.OFFERS.findAll({
+        const offersPOAndSKU = await db.OFFERS.findAll({
           raw: true,
+          attributes: ["po_number", "sku_code"],
           where: {
             deleted_at: null,
             flag_status: "X",
@@ -215,28 +257,79 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
             po_outs: { [Op.ne]: 0 },
           },
         });
+        const distinctPOAndSKU = [...new Set(offersPOAndSKU)];
+        let offersToBeSent = [];
+        for (let key in distinctPOAndSKU) {
+          const fullOfferData = await db.OFFERS.findAll({
+            raw: true,
+            where: {
+              po_number: distinctPOAndSKU[key].po_number,
+              sku_code: distinctPOAndSKU[key].sku_code,
+              deleted_at: null,
+            },
+          });
 
-        if (offers.length === 0) {
+          if (fullOfferData.length === 0 || fullOfferData.length > 1) {
+            console.log(
+              `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} This offer has more than 1 data. 
+              Hard to create the logic`
+            );
+            continue;
+          } else {
+            console.log(
+              `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} 
+              Create email notification for PPIC for PO ${fullOfferData[0].po_number} and SKU ${fullOfferData[0].sku_name} with outstanding quantity ${fullOfferData[0].po_outs}`
+            );
+            offersToBeSent.push(fullOfferData[0]);
+          }
+        }
+        if (offersToBeSent.length === 0) {
           console.log(
             `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} No Schedule debt.`
           );
-        }
-        const generateSentences = (offer) => {
-          let sentences = `${moment().format(
-            "DD-MM-YYYY"
-          )} List jadwal hutang kirim :<br/>`;
-          for (let i = 0; i < offer.length; i++) {
-            const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
-            sentences += scheduleSentence + "<br/>";
-            // You can add more conditions or concatenate more data as needed
-          }
-          return sentences;
-        };
+        } else {
+          console.log(
+            `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
+          );
+          const generateSentences = (offer) => {
+            let sentences = `${moment().format(
+              "DD-MM-YYYY"
+            )} List jadwal hutang kirim :<br/>`;
+            for (let i = 0; i < offer.length; i++) {
+              const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
+              sentences += scheduleSentence + "<br/>";
+              // You can add more conditions or concatenate more data as needed
+            }
+            return sentences;
+          };
 
-        await sendEmailNotificationScheduleDebt(
-          `${offers.length} jadwal masuk status hutang kirim`,
-          generateSentences(offers)
-        );
+          await sendEmailNotificationScheduleDebt(
+            `Jadwal hutang kirim`,
+            generateSentences(offersToBeSent)
+          );
+        }
+
+        // if (offers.length === 0 || offers.length > 1) {
+        //   console.log(
+        //     `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} No Schedule debt.`
+        //   );
+        // }
+        // const generateSentences = (offer) => {
+        //   let sentences = `${moment().format(
+        //     "DD-MM-YYYY"
+        //   )} List jadwal hutang kirim :<br/>`;
+        //   for (let i = 0; i < offer.length; i++) {
+        //     const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
+        //     sentences += scheduleSentence + "<br/>";
+        //     // You can add more conditions or concatenate more data as needed
+        //   }
+        //   return sentences;
+        // };
+
+        // await sendEmailNotificationScheduleDebt(
+        //   `${offers.length} jadwal masuk status hutang kirim`,
+        //   generateSentences(offers)
+        // );
 
         // for (let key in offers) {
         //   if (offers[key].dataValues.verified_status === false) {
@@ -253,9 +346,9 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
         //     }
         //   }
         // }
-        console.log(
-          `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
-        );
+        // console.log(
+        //   `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
+        // );
       } catch (err) {
         console.log(err);
       }
@@ -267,7 +360,7 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
 
 export const hourlyJobUpdatePOOutstanding = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 * * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -307,14 +400,14 @@ export const hourlyJobUpdatePOOutstanding = () => {
           if (po_number === "") {
             continue;
           } else {
-            const [err, res] = await OpenQueryPOOuts(
+            const [err, res] = await OpenQueryGetLineNum(
               po_number,
               sku_code,
               dbTransaction
             );
             // console.log()
 
-            const qtyOuts = res[0].QUANTITY_OUTSTANDING;
+            const qtyOuts = res[0].QTY_OUTS;
             // console.log()
             if (qtyOuts == null) {
               continue;
@@ -350,7 +443,7 @@ export const hourlyJobUpdatePOOutstanding = () => {
 
 export const hourlyJobUpdateColumnHistoryPOOuts = () => {
   new CronJob(
-    "0 0 * * * *",
+    "0 5 * * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       console.log(
@@ -374,15 +467,15 @@ export const hourlyJobUpdateColumnHistoryPOOuts = () => {
         };
         const offers = await db.OFFERS.findAll({
           where: whereClause,
-          attributes: ["po_number", "sku_code"],
+          attributes: ["po_number", "sku_code", "qty_delivery"],
           raw: true,
-          group: ["po_number", "sku_code"],
+          group: ["po_number", "sku_code", "qty_delivery"],
         });
         const distinctOffers = [...new Set(offers)];
-
         for (let key in distinctOffers) {
           const po_number = distinctOffers[key].po_number;
           const sku_code = distinctOffers[key].sku_code;
+          const qty_delivery = distinctOffers[key].qty_delivery;
 
           if (po_number === "") {
             continue;
@@ -391,7 +484,6 @@ export const hourlyJobUpdateColumnHistoryPOOuts = () => {
             // console.log()
 
             const qtyOuts = res[0].QTY_OUTS;
-            console.log(qtyOuts);
             // console.log()
             if (qtyOuts == null) {
               continue;
@@ -411,6 +503,7 @@ export const hourlyJobUpdateColumnHistoryPOOuts = () => {
                     po_outs_history: JSON.stringify([
                       {
                         po_outs: qtyOuts,
+                        qty_delivery,
                         date_record: moment().format("YYYY-MM-DD"),
                       },
                     ]),
@@ -436,6 +529,7 @@ export const hourlyJobUpdateColumnHistoryPOOuts = () => {
                       ...(poOutsHistory || []),
                       {
                         po_outs: qtyOuts,
+                        qty_delivery,
                         date_record: moment().format("YYYY-MM-DD"),
                       },
                     ]),
@@ -469,7 +563,7 @@ export const hourlyJobUpdateColumnHistoryPOOuts = () => {
 
 export const hourlyJobUpdateColumnChangesPOOuts = () => {
   new CronJob(
-    "*/30 * * * * *",
+    "0 10 * * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       console.log(
@@ -493,9 +587,14 @@ export const hourlyJobUpdateColumnChangesPOOuts = () => {
         };
         const offers = await db.OFFERS.findAll({
           where: whereClause,
-          attributes: ["po_number", "sku_code", "po_outs_history"],
+          attributes: [
+            "po_number",
+            "sku_code",
+            "po_outs_history",
+            "qty_delivery",
+          ],
           raw: true,
-          group: ["po_number", "sku_code", "po_outs_history"],
+          group: ["po_number", "sku_code", "po_outs_history", "qty_delivery"],
         });
         const distinctOffers = [...new Set(offers)];
 
@@ -503,7 +602,7 @@ export const hourlyJobUpdateColumnChangesPOOuts = () => {
           const po_number = distinctOffers[key].po_number;
           const sku_code = distinctOffers[key].sku_code;
           const poOutsHistory = JSON.parse(distinctOffers[key].po_outs_history);
-
+          const qty_delivery = distinctOffers[key].qty_delivery;
           if (!poOutsHistory) {
             continue;
           } else {
@@ -513,11 +612,37 @@ export const hourlyJobUpdateColumnChangesPOOuts = () => {
               if (poOutsHistory.length === 0 || poOutsHistory.length === 1) {
                 continue;
               }
-              console.log(poOutsHistory);
-              for (let key in poOutsHistory) {
-                const poOuts = poOutsHistory[key].po_outs;
-                const dateRecord = poOutsHistory[key].date_record;
-              }
+
+              const outsChanges = [];
+              const fulfilledData = [];
+
+              let prevPoOuts = null;
+              let fulfilled = null;
+              let notFulfilled = null;
+
+              poOutsHistory.forEach(
+                ({ po_outs, qty_delivery, date_record }) => {
+                  if (prevPoOuts !== null && po_outs !== prevPoOuts) {
+                    const diff = prevPoOuts - po_outs;
+                    fulfilled = diff;
+                    notFulfilled = po_outs - diff;
+                    outsChanges.push({
+                      po_outs: po_outs,
+                      qty_delivery,
+                      date_record,
+                    });
+                    fulfilledData.push({
+                      fulfilled,
+                      not_fulfilled: notFulfilled,
+                      date_record,
+                    });
+                  }
+                  prevPoOuts = po_outs;
+                }
+              );
+              console.log(outsChanges, "outsChanges");
+              console.log(fulfilledData, "fulfilledData");
+
               // console.log()
               // if (qtyOuts == null) {
               //   continue;

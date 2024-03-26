@@ -41,6 +41,7 @@ import {
   hourlyJobUpdatePOOutstanding,
   hourlyJobUpdateColumnHistoryPOOuts,
   hourlyJobUpdateColumnChangesPOOuts,
+  dailyJobClearTokenDB,
 } from "./middlewares/cronjobs.js";
 import { dynamicRateLimit } from "./middlewares/requestHandling.js";
 
@@ -172,6 +173,7 @@ dailyJobSupplierRefreshSupplier();
 dailyJobSupplierRefreshSupplierUser();
 dailyJobScheduleCheckTodayDeliveryDateAndOutstanding();
 hourlyJobUpdatePOOutstanding();
-hourlyJobUpdateColumnHistoryPOOuts();
-hourlyJobUpdateColumnChangesPOOuts();
+dailyJobClearTokenDB();
+// hourlyJobUpdateColumnHistoryPOOuts();
+// hourlyJobUpdateColumnChangesPOOuts();
 export default app;

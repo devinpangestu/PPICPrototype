@@ -183,7 +183,7 @@ function ModalSplitSchedule(props) {
                                   allowClear={false}
                                   inputReadOnly={true}
                                   disabledDate={(current) => {
-                                    return current && current < moment(data.est_delivery);
+                                    return current && current < moment().startOf("day");
                                   }}
                                   {...utils.FORM_DATEPICKER_PROPS}
                                   style={{ width: "100%" }}
