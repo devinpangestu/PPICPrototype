@@ -15,6 +15,11 @@ const x = {
       connectString: process.env.NODE_MSSQL_CONNECTIONSTRING,
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
+    pool: {
+      max: Infinity,
+      idle: 30000,
+      acquire: 60000,
+    },
     logging: false,
   },
 
@@ -27,7 +32,11 @@ const x = {
       connectString: process.env.NODE_MSSQL_CONNECTIONSTRING,
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
-
+    pool: {
+      max: Infinity,
+      idle: 30000,
+      acquire: 60000,
+    },
     logging: false,
   },
   production: {
@@ -39,7 +48,11 @@ const x = {
       connectString: process.env.NODE_MSSQL_CONNECTIONSTRING,
       schema: process.env.NODE_MSSQL_MAINSCHEMA,
     },
-
+    pool: {
+      max: Infinity,
+      idle: 30000,
+      acquire: 60000,
+    },
     logging: false,
   },
 };

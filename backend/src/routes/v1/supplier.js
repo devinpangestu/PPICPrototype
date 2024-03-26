@@ -1,6 +1,7 @@
 import express from "express";
 import * as SupplierController from "../../controllers/SupplierController.js";
 import { verifyTokenAndRole } from "../../middlewares/auth.js";
+import { dynamicRateLimit } from "../../middlewares/requestHandling.js";
 const router = express.Router();
 
 router.get(
@@ -10,6 +11,7 @@ router.get(
 );
 router.post(
   "/",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleCreate
 );
@@ -20,21 +22,25 @@ router.get(
 );
 router.put(
   "/confirm",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleConfirmSelectedData
 );
 router.put(
   "/confirm/:id",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleConfirm
 );
 router.put(
   "/split-supplier/:id",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleSplitSupplier
 );
 router.put(
   "/close-po/:id",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleClosePOSupplier
 );
@@ -46,6 +52,7 @@ router.get(
 );
 router.put(
   "/complex-edit",
+  dynamicRateLimit,
   verifyTokenAndRole("supplier@edit"),
   SupplierController.SupplierScheduleEdit
 );

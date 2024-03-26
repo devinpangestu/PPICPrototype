@@ -1,8 +1,11 @@
-import create from "zustand";
+import { create } from "zustand";
 
 export const useDataStore = create((set) => ({
   modalImportCSVShow: false,
   setModalImportCSVShow: (show) => set({ modalImportCSVShow: show }),
+
+  modalExportShow: false,
+  setModalExportShow: (show) => set({ modalExportShow: show }),
 
   modalCreateShow: false,
   setModalCreateShow: (show) => set({ modalCreateShow: show }),

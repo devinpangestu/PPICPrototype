@@ -27,7 +27,14 @@ import constant from "constant";
 import ModalSplitSchedule from "./modal/ModalSplitSchedule";
 import handler from "handler";
 import ModalEditAndSend from "./modal/ModalEditAndSend";
-import { authorizationCheck, isAccessTokenValid, isMobile, isSessionTabValid, passwordChangedCheck } from "utils/auth";
+import ModalClosePO from "./modal/ModalClosePO";
+import {
+  authorizationCheck,
+  isAccessTokenValid,
+  isMobile,
+  isSessionTabValid,
+  passwordChangedCheck,
+} from "utils/auth";
 import { usePageStore } from "state/pageState";
 
 const SupplierView = (props) => {
@@ -46,11 +53,38 @@ const SupplierView = (props) => {
 
   const [modalSplitScheduleShow, setModalSplitScheduleShow] = useState(false);
   const [modalSplitScheduleData, setModalSplitScheduleData] = useState(null);
+  const [modalClosePOShow, setModalClosePOShow] = useState(false);
+  const [modalClosePOData, setModalClosePOData] = useState(null);
   const [modalEditAndSendShow, setModalEditAndSendShow] = useState(false);
   const [modalEditAndSendData, setModalEditAndSendData] = useState(null);
   const [previewRowChecked, setPreviewRowChecked] = useState([]);
   const [arrayOfMerge, setArrayOfMerge] = useState([]);
   const [toggleCheckboxTitle, setToggleCheckboxTitle] = useState(true);
+
+  const [expandable, setExpandable] = useState({
+    expandedRowRender: (record) => {
+      if (record.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+        return (
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
+              constant.FORMAT_DISPLAY_DATETIME,
+            )}`}
+            <strong>
+              {`${JSON.parse(record.notes)?.init?.created_by} : ${
+                JSON.parse(record.notes)?.init?.notes
+              }`}
+            </strong>
+          </p>
+        );
+      }
+    },
+    rowExpandable: (record) => {
+      const checkFlagStatus = (record) =>
+        record.flag_status === constant.FLAG_STATUS_SUPPLIER &&
+        JSON.parse(record.notes)?.init?.notes;
+      return checkFlagStatus(record);
+    },
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -134,6 +168,10 @@ const SupplierView = (props) => {
       });
     }
   }
+
+  const tableProps = {
+    expandable,
+  };
   const getCellConfig = (arrayOfMerge, index) => {
     if (arrayOfMerge[index] === false && arrayOfMerge[index - 1] === true) {
       return { rowSpan: 0 };
@@ -283,12 +321,23 @@ const SupplierView = (props) => {
         return utils.thousandSeparator(row.qty_delivery);
       },
     },
+
     {
       title: t("estDelivery"),
       dataIndex: "est_delivery",
       key: "est_delivery",
       render: (_, row) => {
         return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+      },
+    },
+    {
+      title: t("sendSupplierDate"),
+      dataIndex: "send_supplier_date",
+      key: "send_supplier_date",
+      render: (_, row) => {
+        return row.send_supplier_date
+          ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
       },
     },
     // {
@@ -309,24 +358,24 @@ const SupplierView = (props) => {
     //       : "-";
     //   },
     // },
-    // {
-    //   title: t("supplierQty"),
-    //   dataIndex: "submitted_qty",
-    //   key: "submitted_qty",
-    //   render: (_, row) => {
-    //     return utils.thousandSeparator(row.submitted_qty);
-    //   },
-    // },
-    // {
-    //   title: t("supplierDate"),
-    //   dataIndex: "est_submitted_date",
-    //   key: "est_submitted_date",
-    //   render: (_, row) => {
-    //     return row.est_submitted_date
-    //       ? moment(row.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
-    //       : "-";
-    //   },
-    // },
+    {
+      title: t("supplierQty"),
+      dataIndex: "submitted_qty",
+      key: "submitted_qty",
+      render: (_, row) => {
+        return utils.thousandSeparator(row.submitted_qty);
+      },
+    },
+    {
+      title: t("supplierDate"),
+      dataIndex: "est_submitted_date",
+      key: "est_submitted_date",
+      render: (_, row) => {
+        return row.est_submitted_date
+          ? moment(row.est_submitted_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
     {
       title: t("action"),
       dataIndex: "action",
@@ -337,10 +386,24 @@ const SupplierView = (props) => {
         let btnSplit;
         let btnConfirm;
         let btnClosePO;
-        if (
-          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
-          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
-        ) {
+        let tagStatus;
+        let tagHutangKirim;
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
+          </div>
+        );
+
+        tagHutangKirim = row?.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           btnSplit = (
             <Button
               className="mr-1 mb-1"
@@ -383,12 +446,15 @@ const SupplierView = (props) => {
             </Button>
           );
           if (row.hutang_kirim) {
+            tagHutangKirim = renderTag("error", "Hutang Kirim");
             btnClosePO = (
               <Button
                 className="mr-1 mb-1"
                 size="small"
                 type="warning"
                 onClick={() => {
+                  // setModalClosePOData(row);
+                  // setModalClosePOShow(true);
                   Modal.confirm({
                     ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
                     content: `Request for close this PO ?`,
@@ -413,15 +479,16 @@ const SupplierView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              {btnSplit}
-              {btnClosePO}
-              {btnConfirm}
-            </div>
-          );
         }
-        return;
+
+        return (
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {tagHutangKirim}
+            {btnSplit}
+            {btnClosePO}
+            {btnConfirm}
+          </div>
+        );
       },
     },
     {
@@ -476,19 +543,29 @@ const SupplierView = (props) => {
             //count the next true value and break the loop after false and if the true is counted, ignore them
           }
         };
-        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <Tag className="ma-0" color="success">
-                Completed
-              </Tag>
-            </div>
-          );
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
+          </div>
+        );
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) {
+          tagStatus = renderTag("warning", "Request (PPIC)");
         }
-        if (
-          row.flag_status === constant.FLAG_STATUS_SUPPLIER ||
-          row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST
-        ) {
+        if (row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST) {
+          tagStatus = renderTag("warning", "Request (Procurement)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+          tagStatus = renderTag("success", "Complete Schedule");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
           btnEditAndSend = (
             <Button
               className="mr-1 mb-1"
@@ -501,7 +578,15 @@ const SupplierView = (props) => {
                     const data = res.data.rs_body;
 
                     setModalEditAndSendData(
-                      data.filter((item) => item.is_split === false && item.is_edit === false),
+                      data.filter(
+                        (item) =>
+                          item.is_split === false &&
+                          item.is_edit === false &&
+                          (item.flag_status === constant.FLAG_STATUS_SUPPLIER ||
+                            item.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                            item.flag_status === constant.FLAG_STATUS_PPIC_REQUEST ||
+                            item.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE),
+                      ),
                     );
                     setModalEditAndSendShow(true);
                   })
@@ -548,13 +633,14 @@ const SupplierView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              {btnEditAndSend}
-              {btnConfirm}
-            </div>
-          );
         }
+        return (
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            {tagStatus}
+            {btnEditAndSend}
+            {btnConfirm}
+          </div>
+        );
       },
     },
   ];
@@ -577,6 +663,18 @@ const SupplierView = (props) => {
           loadOffers();
         }}
         data={modalSplitScheduleData}
+      />
+      <ModalClosePO
+        visible={modalClosePOShow}
+        onCancel={() => {
+          setModalClosePOShow(false);
+        }}
+        onSuccess={() => {
+          setModalClosePOShow(false);
+          message.success("Offer Splitted Successfully");
+          loadOffers();
+        }}
+        data={modalClosePOData}
       />
       <ModalEditAndSend
         visible={modalEditAndSendShow}
@@ -634,6 +732,7 @@ const SupplierView = (props) => {
             </Button>
           </Space>
           <Table
+            {...tableProps}
             dataSource={dataSource}
             columns={columns}
             pagination={{

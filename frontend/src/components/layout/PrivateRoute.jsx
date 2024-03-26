@@ -26,8 +26,12 @@ export const PrivateRoute = ({ component: Component, neededPermission, ...rest }
         } else if (userInfo.role.id === 3) {
           pathName = "/procurement/dashboard";
         } else if (userInfo.role.id === 4) {
+          pathName = "/procurement/dashboard";
+        } else if (userInfo.role.id === 5) {
           pathName = "/supplier/dashboard";
-        }
+        } else if (userInfo.role.id === 6) {
+          pathName = "/ppic/dashboard";
+        } 
 
         return <Redirect to={{ pathname: pathName }} />;
       }

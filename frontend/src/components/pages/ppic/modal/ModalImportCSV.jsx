@@ -79,12 +79,23 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
         const rows = CSV.parse(e.target.result);
 
         for (const r of rows) {
-          if (r.length !== 9) {
+          if (r.every((value) => value === "")) {
             continue;
           }
-          if (tempMassCreateFileContent.find((el) => el.po_number === r[0])) {
-            // skip duplicate transportir_id
-            continue;
+          // if (tempMassCreateFileContent.find((el) => el.po_number === r[4])) {
+          //   continue;
+          // }
+          if (!sendToApiFormat(r[2])) {
+            utils.swal.Error({ msg: "Invalid CSV Format on Column 2 expected 'Submission Date'" });
+            setIsUploading(false);
+            return;
+          }
+          if (!sendToApiFormat(r[10])) {
+            utils.swal.Error({
+              msg: "Invalid CSV Format on Column 2 expected 'Est Delivery Date'",
+            });
+            setIsUploading(false);
+            return;
           }
           tempMassCreateFileContent.push({
             io_filter: r[0],
@@ -100,6 +111,7 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
             est_delivery: sendToApiFormat(r[10]),
             notes_ppic: r[11],
           });
+          console.log("tempMassCreateFileContent", tempMassCreateFileContent);
         }
         setMassCreateFileContent(tempMassCreateFileContent);
         setPreviewRowChecked(new Array(tempMassCreateFileContent.length).fill(true));
@@ -204,6 +216,14 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
       key: "est_delivery",
       render: (_, row) => {
         return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE);
+      },
+    },
+    {
+      title: t("notes"),
+      dataIndex: "notes_ppic",
+      key: "notes_ppic",
+      render: (_, row) => {
+        return row.notes_ppic;
       },
     },
     // {

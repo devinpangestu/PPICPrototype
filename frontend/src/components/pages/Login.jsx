@@ -11,6 +11,7 @@ import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { Form, Input, Button, Image, Card } from "antd";
 import { Encrypt } from "utils/encryption";
 import ReCAPTCHA from "react-google-recaptcha";
+import moment from "moment";
 
 function Login(props) {
   const [t] = useTranslation();
@@ -65,12 +66,22 @@ function Login(props) {
     let redirectTo = "/ppic/dashboard";
     if (!utils.getUserInfo().password_changed) {
       redirectTo = "/change-password";
+    } else if (
+      moment(utils.getUserInfo().password_changed)
+        .add(90, "days")
+        .format(constant.FORMAT_API_DATE) < moment().format(constant.FORMAT_API_DATE)
+    ) {
+      redirectTo = "/change-password";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 2)) {
       redirectTo = "/ppic/dashboard";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 3)) {
       redirectTo = "/procurement/dashboard";
     } else if (utils.redirectRole(utils.getUserInfo().role.id, 4)) {
+      redirectTo = "/procurement/dashboard";
+    } else if (utils.redirectRole(utils.getUserInfo().role.id, 5)) {
       redirectTo = "/supplier/dashboard";
+    } else if (utils.redirectRole(utils.getUserInfo().role.id, 6)) {
+      redirectTo = "/ppic/dashboard";
     }
     setLoginAttempts && setLoginAttempts(0);
     window.location = import.meta.env.VITE_WEB_BASE_URL + redirectTo;

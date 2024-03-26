@@ -36,6 +36,7 @@ import logo from "assets/images/logo_bkp.png";
 import handler from "handler";
 import constant from "constant";
 import { api } from "api";
+import moment from "moment";
 
 export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction, children }) => {
   const [t] = useTranslation();
@@ -90,7 +91,9 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
       "menu-config",
     );
   }
-
+  const canViewTransactionHistory =
+    utils.havePermission(userInfo.permissions, "purchasing@view") ||
+    utils.havePermission(userInfo.permissions, "ppic@view");
   const siderContent = (
     <>
       <div className="w-100 position-relative">
@@ -128,9 +131,6 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                   >{`${t("dashboard")}`}</NavLink>
                 </Menu.Item>,
                 "ppic@view",
-                "ppic@create",
-                "ppic@edit",
-                "ppic@delete",
               )}
               {utils.renderWithPermission(
                 userInfo.permissions,
@@ -192,7 +192,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             <Menu.Divider />
           </>
         )}
-        {utils.havePermission(userInfo.permissions, "ppic@view") && (
+        {userInfo.role.id !== 5 && userInfo.role.id !== 6 && (
           <>
             <Menu.SubMenu
               style={{ fontSize: conditionalMobileState("10px", "14px") }}
@@ -200,22 +200,20 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
               icon={<ScheduleOutlined />}
               title={t("Transaction")}
             >
-              {utils.renderWithPermission(
-                userInfo.permissions,
-                <Menu.Item key="/history">
-                  <NavLink
-                    to={"/history"}
-                    style={{ fontSize: conditionalMobileState("8px", "14px") }}
-                  >
-                    {t("history")}
-                  </NavLink>
-                </Menu.Item>,
-                "ppic@view",
-              )}
+              <Menu.Item key="/history">
+                <NavLink
+                  to={"/history"}
+                  style={{ fontSize: conditionalMobileState("8px", "14px") }}
+                >
+                  {t("history")}
+                </NavLink>
+              </Menu.Item>
+              ,
             </Menu.SubMenu>
             <Menu.Divider />
           </>
         )}
+
         {(utils.havePermission(
           userInfo.permissions,
           "user@view",
@@ -284,7 +282,20 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
       {siderContent}
     </Layout.Sider>
   );
-
+  const itemsDropdown = [
+    {
+      label: <Link to={"/change-password"}>{t("changePassword")}</Link>,
+      key: "menu-changePwd",
+    },
+    {
+      label: (
+        <>
+          {t("use")} <strong onClick={handleChangeLang}>{otherLang.label}</strong>
+        </>
+      ),
+      key: "menu-changeLang",
+    },
+  ];
   let layoutWrapperCls = "layout-wrapper";
 
   useEffect(() => {
@@ -330,11 +341,14 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                             if (userInfo.role.id === 2) {
                               return "/ppic/dashboard";
                             } else if (userInfo.role.id === 3) {
-                              return "/purchasing/dashboard";
+                              return "/procurement/dashboard";
                             } else if (userInfo.role.id === 4) {
+                              return "/procurement/dashboard";
+                            } else if (userInfo.role.id === 5) {
                               return "/supplier/dashboard";
+                            } else if (userInfo.role.id === 6) {
+                              return "/ppic/dashboard";
                             }
-                            return "/ppic/dashboard";
                           }}
                         >
                           {t("home")}
@@ -384,21 +398,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                   {userInfo.user_name}
                 </Button>
               </Popover>
-              <Dropdown
-                trigger={["click"]}
-                overlay={
-                  <Menu>
-                    <Menu.Item key="menu-changePwd">
-                      <Link to={"/change-password"}>{t("changePassword")}</Link>
-                    </Menu.Item>
-                    <Menu.Item key="menu-changeLang" onClick={handleChangeLang}>
-                      {t("use")} <strong>{otherLang.label}</strong>
-                    </Menu.Item>
-                  </Menu>
-                }
-                placement="bottomLeft"
-                arrow
-              >
+              <Dropdown trigger={["click"]} menu={{ itemsDropdown }} placement="bottomLeft" arrow>
                 <Button className="mr-2" icon={<SettingOutlined />} />
               </Dropdown>
               <Button
@@ -417,7 +417,7 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
             </Col>
           </Row>
           <Layout.Content className="mx-4 px-5 py-4 mb-4 layout-content">
-            {userInfo.password_changed === false && (
+            {userInfo.password_changed === false ? (
               <Alert
                 className="mb-5"
                 message={
@@ -431,7 +431,10 @@ export const PageContainer = ({ breadcrumbs, title, additionalAction, btnAction,
                 type="warning"
                 showIcon
               />
-            )}
+            ) : moment(userInfo.password_changed).add(90, "days").format(constant.FORMAT_API_DATE) <
+              moment().format(constant.FORMAT_API_DATE) ? (
+              <Alert className="mb-5" message={t("alertPwdExp")} type="warning" showIcon />
+            ) : null}
             {title && (
               <SectionHeading
                 size={4}

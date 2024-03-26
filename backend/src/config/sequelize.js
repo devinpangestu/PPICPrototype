@@ -7,6 +7,11 @@ const sequelize = new Sequelize({
   dialectOptions: {
     connectString: process.env.NODE_MSSQL_CONNECTIONSTRING,
   },
+  pool: {
+    max: 10,
+    min: 0,
+    idle: 10000,
+  },
   schema: process.env.NODE_MSSQL_MAINSCHEMA,
 });
 

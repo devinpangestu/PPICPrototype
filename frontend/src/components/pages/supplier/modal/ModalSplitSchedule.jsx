@@ -37,6 +37,7 @@ function ModalSplitSchedule(props) {
     id: null,
     est_delivery: null,
     qty_delivery: null,
+    split_from_id: null,
     notes: null,
   });
   const [splits, setSplits] = useState([]);
@@ -51,10 +52,11 @@ function ModalSplitSchedule(props) {
         {
           split_from_id: data.split_from_id,
           id: data.id,
+          notes: null,
           est_delivery: moment(data.est_delivery),
           qty_delivery: data.qty_delivery,
         },
-        { split_from_id: null, id: null, est_delivery: null, qty_delivery: null },
+        { split_from_id: null, id: null, notes: null, est_delivery: null, qty_delivery: null },
       ],
     });
     setSplits([
@@ -123,7 +125,12 @@ function ModalSplitSchedule(props) {
         ${data.po_number}
         ${data.sku_code} ${data.sku_name}
         MAX SPLIT QTY: ${data?.qty_delivery} REMAINING QTY FULFILLED: ${splits.reduce(
-          (prev, curr) => prev + curr.qty_delivery,
+          (prev, curr) => {
+            if (curr?.qty_delivery !== undefined) {
+              return prev + curr.qty_delivery;
+            }
+            return prev;
+          },
           0,
         )}/${data?.qty_delivery}`}
         open={visible}
@@ -186,7 +193,7 @@ function ModalSplitSchedule(props) {
                                   allowClear={false}
                                   inputReadOnly={true}
                                   disabledDate={(current) => {
-                                    return current && current < moment(data.est_delivery);
+                                    return current && current < moment().startOf("day");
                                   }}
                                   {...utils.FORM_DATEPICKER_PROPS}
                                   style={{ width: "100%" }}
@@ -226,9 +233,11 @@ function ModalSplitSchedule(props) {
                                   style={{ width: "100%" }}
                                   placeholder={`${t("input")} ${t("qtyDelivery")}`}
                                   onChange={(value) => {
-                                    const { schedules } = form.getFieldsValue();
-                                    form.setFieldsValue({ schedules });
+                                    const { schedules } = form.getFieldsValue("schedules");
+                                    console.log(form.getFieldValue("schedules"));
                                     setSplits(schedules);
+                                    form.setFieldsValue(...schedules);
+
                                     setRemainingQtyFulfilled(data?.qty_delivery - value);
                                   }}
                                   value={newSplit.qty_delivery || ""}
@@ -246,14 +255,14 @@ function ModalSplitSchedule(props) {
                                 label={t("notes")}
                                 rules={[
                                   {
-                                    required: true,
+                                    // required: true,
                                     message: `${t("input")} ${t("notes")}`,
                                   },
-                                  {
-                                    type: "string",
-                                    min: 6,
-                                    message: t("Notes must be at least 6 characters"),
-                                  },
+                                  // {
+                                  //   type: "string",
+                                  //   min: 6,
+                                  //   message: t("Notes must be at least 6 characters"),
+                                  // },
                                 ]}
                                 labelCol={{ span: labelColSpan }} // Set the width of the label column
                                 wrapperCol={{ span: 11 }}

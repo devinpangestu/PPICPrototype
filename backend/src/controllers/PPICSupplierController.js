@@ -65,7 +65,8 @@ export const PPICSupplierRefreshOracle = async (req, res) => {
       return errorResponse(req, res, "User not authorized");
     }
 
-    const err = await refreshOracle(transaction);
+    let err = await refreshOracle(transaction);
+
     if (!err) {
       await transaction.rollback();
       return errorResponse(
@@ -82,7 +83,8 @@ export const PPICSupplierRefreshOracle = async (req, res) => {
   }
 };
 export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
-  const dbTransaction = await db.sequelize.transaction();
+  const dbTransactionSupplierUpdate = await db.sequelize.transaction();
+  const dbTransactionCreateUser = await db.sequelize.transaction();
   try {
     const { id } = req.params;
     const userId = getUserID(req);
@@ -116,9 +118,9 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
           id,
         },
       },
-      { dbTransaction }
+      { transaction: dbTransactionSupplierUpdate }
     );
-
+    await dbTransactionSupplierUpdate.commit();
     const passwordToCreate = uniqueId(8);
     const newPasswordToHash = await bcrypt.hash(passwordToCreate, 4);
 
@@ -148,27 +150,36 @@ export const PPICSupplierCreateUserAndSendEmail = async (req, res) => {
     //TODO : ADD SEND EMAIL
     await sendEmailVerification(
       supplier.email,
-      `Welcoming ${supplier.name}!`,
+      `Welcome ${supplier.name}!`,
       passwordToCreate
     );
-    await db.USERS.create({
-      email: supplier.email,
-      user_id: supplier.email,
-      password: newPasswordToHash,
-      name: `${supplier.name}`,
-      supplier_id: supplier.ref_id,
-      role_id: 4,
-      created_at: new Date(),
-      updated_at: new Date(),
-      created_by_id: userId,
-      last_used_password: JSON.stringify([`${newPasswordToHash}`]),
-    });
+    await db.USERS.create(
+      {
+        email: supplier.email,
+        user_id: supplier.email,
+        password: newPasswordToHash,
+        name: `${supplier.name}`,
+        supplier_id: supplier.ref_id,
+        role_id: 5,
+        created_at: new Date(),
+        updated_at: new Date(),
+        created_by_id: userId,
+        last_used_password: JSON.stringify([`${newPasswordToHash}`]),
+      },
+      {
+        transaction: dbTransactionCreateUser,
+      }
+    );
+    await dbTransactionSupplierUpdate.commit();
+    await dbTransactionCreateUser.commit();
     return successResponse(
       req,
       res,
       `Create User Request Sent to ${supplier.name}`
     );
   } catch (error) {
+    await dbTransactionSupplierUpdate.rollback();
+    await dbTransactionCreateUser.rollback();
     return errorResponse(req, res, error.message);
   }
 };
@@ -735,7 +746,12 @@ export const PPICSupplierTransactions = async (req, res) => {
         {
           model: db.USERS,
           as: "crtd_by",
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: db.USERS,
+          as: "buyer",
+          attributes: ["id", "name", "email", "oracle_username"],
         },
       ],
     });
@@ -820,7 +836,7 @@ export const PPICSupplierTransactions = async (req, res) => {
 export const testOPENQUERY = async (req, res) => {
   try {
     const runQuery = async () => {
-      const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT AP_SUPPLIERS.SEGMENT1 "Supplier Number",
+      const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT AP_SUPPLIERS.SEGMENT1 "Supplier Number",
       AP_SUPPLIERS.VENDOR_NAME "Supplier Name",
       AP_SUPPLIER_SITES_ALL.VENDOR_SITE_CODE "Vendor Site Code",
       HZ_CONTACT_POINTS.EMAIL_ADDRESS "Email Address"
@@ -960,7 +976,7 @@ async function history(db, supplierId) {
 
 export const refreshOracle = async (transaction) => {
   const runQuery = async () => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT 
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT 
     AP_SUPPLIERS.VENDOR_ID "ref_id",
     AP_SUPPLIERS.SEGMENT1 "supplier_number",
             AP_SUPPLIERS.VENDOR_NAME "name",
@@ -988,7 +1004,6 @@ export const refreshOracle = async (transaction) => {
   try {
     const oracleDataMerge = await db.sequelize.query(rawQuery, {
       type: Sequelize.QueryTypes.SELECT,
-      transaction,
     });
     const oracleDataSplitted = oracleDataMerge.flatMap((supplier) => {
       const emailList =
@@ -1000,7 +1015,6 @@ export const refreshOracle = async (transaction) => {
     });
     const MSSQLDataSplitted = await db.SUPPLIERS.findAll({
       raw: true,
-      transaction,
     });
     const MSSQLDataEmailMerge = MSSQLDataSplitted.map((supplier) => {
       const SupplierEmailList = MSSQLDataSplitted.filter((sup) => {
@@ -1020,15 +1034,15 @@ export const refreshOracle = async (transaction) => {
 
     const toInsert = [];
     const toDelete = [];
-
+    const tempCompare = [];
     //first init
     if (MSSQLDataSplitted.length === 0 && MSSQLDataEmailMerge.length === 0) {
       for (let key in oracleDataSplitted) {
-        await db.SUPPLIERS.create(oracleDataSplitted[key], { transaction });
+        await db.SUPPLIERS.create(oracleDataSplitted[key]);
       }
     } else {
       for (let key in oracleDataSplitted) {
-        const existingSupplier = MSSQLDataSplitted.filter(
+        const existingSupplier = MSSQLDataSplitted.find(
           (sqlSupplier) =>
             sqlSupplier.name === oracleDataSplitted[key].name &&
             sqlSupplier.email === oracleDataSplitted[key].email
@@ -1038,29 +1052,30 @@ export const refreshOracle = async (transaction) => {
         }
       }
       for (let key in MSSQLDataSplitted) {
-        const existingSupplier = oracleDataSplitted.filter(
+        const existingSupplier = oracleDataSplitted.find(
           (sqlSupplier) =>
             sqlSupplier.name === MSSQLDataSplitted[key].name &&
             sqlSupplier.email === MSSQLDataSplitted[key].email
         );
         if (!existingSupplier) {
           toDelete.push({ id: MSSQLDataSplitted[key].id });
+        } else {
+          tempCompare.push(existingSupplier);
         }
+        //compare data with mssql and delete if not exist in mssql
       }
     }
 
     for (let key in toInsert) {
-      await db.SUPPLIERS.create(toInsert[key], { transaction });
+      await db.SUPPLIERS.create(toInsert[key]);
     }
     for (let key in toDelete) {
       await db.SUPPLIERS.destroy({
         where: {
           id: toDelete[key].id,
         },
-        transaction,
       });
     }
-
     return true;
   } catch (error) {
     console.error(error);

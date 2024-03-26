@@ -42,10 +42,6 @@ module.exports = {
       supplier_id: {
         defaultValue: null,
         type: Sequelize.NUMERIC,
-        references: {
-          model: "SUPPLIERS",
-          key: "ref_id",
-        },
       },
       failed_login_attempts: {
         defaultValue: 0,

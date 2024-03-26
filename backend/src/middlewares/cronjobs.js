@@ -12,7 +12,7 @@ import { constant } from "../constant/index.js";
 
 export const dailyJobSupplierValidityCheck = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -91,7 +91,7 @@ export const dailyJobSupplierRefreshSupplier = () => {
 };
 export const dailyJobSupplierRefreshSupplierUser = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -107,7 +107,7 @@ export const dailyJobSupplierRefreshSupplierUser = () => {
           where: {
             deleted_at: null,
             password_changed_at: null,
-            role_id: 4,
+            role_id: 5,
           },
           raw: true,
         });
@@ -191,10 +191,51 @@ export const dailyJobSupplierRefreshSupplierUser = () => {
     true
   );
 };
+export const dailyJobClearTokenDB = () => {
+  new CronJob(
+    "0 0 0 * * *",
+    //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
+    async () => {
+      const tNow = new Date();
+      const dateNow = tNow.toISOString().split("T")[0];
+      const timeNow = tNow.toISOString().split("T")[1].split(".")[0];
+      console.log(`[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} START`);
+
+      try {
+        // CHECK FOR USER THAT NOT LOGIN UNTIL MIDNIGHT
+        const allToken = await db.TOKEN.findAll({
+          where: {
+            expired_at: { [Op.lte]: new Date() },
+          },
+          raw: true,
+        });
+        if (allToken.length === 0) {
+          console.log(
+            `[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} No Token to deleted today, seems like this website not active.`
+          );
+        }
+        for (let key in allToken) {
+          await db.TOKEN.destroy({
+            where: {
+              id: allToken[key].id,
+            },
+          });
+        }
+        console.log(
+          `[CRON DAILY CLEAR TOKEN DB] ${dateNow} ${timeNow} SUCCESSFULY CLEAN TOKEN DATA.`
+        );
+      } catch (err) {
+        console.log(err);
+      }
+    },
+    null,
+    true
+  );
+};
 
 export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 0 * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -206,8 +247,9 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
 
       try {
         // Fetch data from DB
-        const offers = await db.OFFERS.findAll({
+        const offersPOAndSKU = await db.OFFERS.findAll({
           raw: true,
+          attributes: ["po_number", "sku_code"],
           where: {
             deleted_at: null,
             flag_status: "X",
@@ -215,28 +257,79 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
             po_outs: { [Op.ne]: 0 },
           },
         });
+        const distinctPOAndSKU = [...new Set(offersPOAndSKU)];
+        let offersToBeSent = [];
+        for (let key in distinctPOAndSKU) {
+          const fullOfferData = await db.OFFERS.findAll({
+            raw: true,
+            where: {
+              po_number: distinctPOAndSKU[key].po_number,
+              sku_code: distinctPOAndSKU[key].sku_code,
+              deleted_at: null,
+            },
+          });
 
-        if (offers.length === 0) {
+          if (fullOfferData.length === 0 || fullOfferData.length > 1) {
+            console.log(
+              `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} This offer has more than 1 data. 
+              Hard to create the logic`
+            );
+            continue;
+          } else {
+            console.log(
+              `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} 
+              Create email notification for PPIC for PO ${fullOfferData[0].po_number} and SKU ${fullOfferData[0].sku_name} with outstanding quantity ${fullOfferData[0].po_outs}`
+            );
+            offersToBeSent.push(fullOfferData[0]);
+          }
+        }
+        if (offersToBeSent.length === 0) {
           console.log(
             `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} No Schedule debt.`
           );
-        }
-        const generateSentences = (offer) => {
-          let sentences = `${moment().format(
-            "DD-MM-YYYY"
-          )} List jadwal hutang kirim :<br/>`;
-          for (let i = 0; i < offer.length; i++) {
-            const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
-            sentences += scheduleSentence + "<br/>";
-            // You can add more conditions or concatenate more data as needed
-          }
-          return sentences;
-        };
+        } else {
+          console.log(
+            `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
+          );
+          const generateSentences = (offer) => {
+            let sentences = `${moment().format(
+              "DD-MM-YYYY"
+            )} List jadwal hutang kirim :<br/>`;
+            for (let i = 0; i < offer.length; i++) {
+              const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
+              sentences += scheduleSentence + "<br/>";
+              // You can add more conditions or concatenate more data as needed
+            }
+            return sentences;
+          };
 
-        await sendEmailNotificationScheduleDebt(
-          `${offers.length} jadwal masuk status hutang kirim`,
-          generateSentences(offers)
-        );
+          await sendEmailNotificationScheduleDebt(
+            `Jadwal hutang kirim`,
+            generateSentences(offersToBeSent)
+          );
+        }
+
+        // if (offers.length === 0 || offers.length > 1) {
+        //   console.log(
+        //     `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} No Schedule debt.`
+        //   );
+        // }
+        // const generateSentences = (offer) => {
+        //   let sentences = `${moment().format(
+        //     "DD-MM-YYYY"
+        //   )} List jadwal hutang kirim :<br/>`;
+        //   for (let i = 0; i < offer.length; i++) {
+        //     const scheduleSentence = `- ${offer[i].po_number} untuk barang ${offer[i].sku_name} dengan outstanding quantity ${offer[i].po_outs}`;
+        //     sentences += scheduleSentence + "<br/>";
+        //     // You can add more conditions or concatenate more data as needed
+        //   }
+        //   return sentences;
+        // };
+
+        // await sendEmailNotificationScheduleDebt(
+        //   `${offers.length} jadwal masuk status hutang kirim`,
+        //   generateSentences(offers)
+        // );
 
         // for (let key in offers) {
         //   if (offers[key].dataValues.verified_status === false) {
@@ -253,9 +346,9 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
         //     }
         //   }
         // }
-        console.log(
-          `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
-        );
+        // console.log(
+        //   `[CRON DAILY CHECKING SCHEDULE DEBT] ${dateNow} ${timeNow} ===> email SENT to PPIC`
+        // );
       } catch (err) {
         console.log(err);
       }
@@ -265,9 +358,9 @@ export const dailyJobScheduleCheckTodayDeliveryDateAndOutstanding = () => {
   );
 };
 
-export const dailyJobUpdatePOOutstanding = () => {
+export const hourlyJobUpdatePOOutstanding = () => {
   new CronJob(
-    "0 0 23 * * *",
+    "0 0 * * * *",
     //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
     async () => {
       const tNow = new Date();
@@ -298,22 +391,23 @@ export const dailyJobUpdatePOOutstanding = () => {
           raw: true,
           group: ["po_number", "sku_code"],
         });
+        const distinctOffers = [...new Set(offers)];
 
-        for (let key in offers) {
-          const po_number = offers[key].po_number;
-          const sku_code = offers[key].sku_code;
+        for (let key in distinctOffers) {
+          const po_number = distinctOffers[key].po_number;
+          const sku_code = distinctOffers[key].sku_code;
 
           if (po_number === "") {
             continue;
           } else {
-            const [err, res] = await OpenQueryPOOuts(
+            const [err, res] = await OpenQueryGetLineNum(
               po_number,
               sku_code,
               dbTransaction
             );
             // console.log()
 
-            const qtyOuts = res[0].QUANTITY_OUTSTANDING;
+            const qtyOuts = res[0].QTY_OUTS;
             // console.log()
             if (qtyOuts == null) {
               continue;
@@ -326,7 +420,7 @@ export const dailyJobUpdatePOOutstanding = () => {
                     sku_code,
                   },
                 },
-                { dbTransaction }
+                { transaction: dbTransaction }
               );
             }
           }
@@ -346,17 +440,296 @@ export const dailyJobUpdatePOOutstanding = () => {
     true
   );
 };
+
+export const hourlyJobUpdateColumnHistoryPOOuts = () => {
+  new CronJob(
+    "0 5 * * * *",
+    //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
+    async () => {
+      console.log(
+        `[CRON DAILY UPDATING COLUMN HISTORY PO OUTSTANDING 6 MONTH BEFORE] ${moment().format(
+          "DD-MMM-YYYY HH:mm:ss"
+        )} Start`
+      );
+      // const dbTransaction = await db.sequelize.transaction();
+      try {
+        const whereClause = {
+          submission_date: {
+            [Op.between]: [
+              moment()
+                .subtract(6, "months")
+                .startOf("month")
+                .format(constant.FORMAT_API_DATE),
+              moment().format(constant.FORMAT_API_DATE),
+            ],
+          },
+          deleted_at: null,
+        };
+        const offers = await db.OFFERS.findAll({
+          where: whereClause,
+          attributes: ["po_number", "sku_code", "qty_delivery"],
+          raw: true,
+          group: ["po_number", "sku_code", "qty_delivery"],
+        });
+        const distinctOffers = [...new Set(offers)];
+        for (let key in distinctOffers) {
+          const po_number = distinctOffers[key].po_number;
+          const sku_code = distinctOffers[key].sku_code;
+          const qty_delivery = distinctOffers[key].qty_delivery;
+
+          if (po_number === "") {
+            continue;
+          } else {
+            const [err, res] = await OpenQueryGetLineNum(po_number, sku_code);
+            // console.log()
+
+            const qtyOuts = res[0].QTY_OUTS;
+            // console.log()
+            if (qtyOuts == null) {
+              continue;
+            } else {
+              const historyPOOuts = await db.OFFERS.findOne({
+                where: {
+                  po_number,
+                  sku_code,
+                },
+                attributes: ["po_outs_history"],
+                raw: true,
+              });
+              const poOutsHistory = JSON.parse(historyPOOuts.po_outs_history);
+              if (!poOutsHistory) {
+                await db.OFFERS.update(
+                  {
+                    po_outs_history: JSON.stringify([
+                      {
+                        po_outs: qtyOuts,
+                        qty_delivery,
+                        date_record: moment().format("YYYY-MM-DD"),
+                      },
+                    ]),
+                  },
+                  {
+                    where: {
+                      po_number,
+                      sku_code,
+                    },
+                  }
+                );
+              } else {
+                if (poOutsHistory.length > 0) {
+                  const lastRecord = poOutsHistory[poOutsHistory.length - 1];
+                  if (lastRecord.po_outs === qtyOuts) {
+                    continue;
+                  }
+                }
+
+                await db.OFFERS.update(
+                  {
+                    po_outs_history: JSON.stringify([
+                      ...(poOutsHistory || []),
+                      {
+                        po_outs: qtyOuts,
+                        qty_delivery,
+                        date_record: moment().format("YYYY-MM-DD"),
+                      },
+                    ]),
+                  },
+                  {
+                    where: {
+                      po_number,
+                      sku_code,
+                    },
+                  }
+                );
+              }
+            }
+          }
+        }
+
+        // await dbTransaction.commit();
+        console.log(
+          `[CRON DAILY UPDATING COLUMN HISTORY PO OUTSTANDING 6 MONTH BEFORE] ${moment().format(
+            "DD-MMM-YYYY HH:mm:ss"
+          )} SUCCESS REFRESH COLUMN HISTORY PO OUTSTANDING`
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    null,
+    true
+  );
+};
+
+export const hourlyJobUpdateColumnChangesPOOuts = () => {
+  new CronJob(
+    "0 10 * * * *",
+    //0-59sec(optional) 0-59min 0-23hour 1-31daymonth 1-12month 0-7dayweek
+    async () => {
+      console.log(
+        `[CRON DAILY UPDATING COLUMN CHANGES PO OUTSTANDING 6 MONTH BEFORE] ${moment().format(
+          "DD-MMM-YYYY HH:mm:ss"
+        )} Start`
+      );
+      // const dbTransaction = await db.sequelize.transaction();
+      try {
+        const whereClause = {
+          submission_date: {
+            [Op.between]: [
+              moment()
+                .subtract(6, "months")
+                .startOf("month")
+                .format(constant.FORMAT_API_DATE),
+              moment().format(constant.FORMAT_API_DATE),
+            ],
+          },
+          deleted_at: null,
+        };
+        const offers = await db.OFFERS.findAll({
+          where: whereClause,
+          attributes: [
+            "po_number",
+            "sku_code",
+            "po_outs_history",
+            "qty_delivery",
+          ],
+          raw: true,
+          group: ["po_number", "sku_code", "po_outs_history", "qty_delivery"],
+        });
+        const distinctOffers = [...new Set(offers)];
+
+        for (let key in distinctOffers) {
+          const po_number = distinctOffers[key].po_number;
+          const sku_code = distinctOffers[key].sku_code;
+          const poOutsHistory = JSON.parse(distinctOffers[key].po_outs_history);
+          const qty_delivery = distinctOffers[key].qty_delivery;
+          if (!poOutsHistory) {
+            continue;
+          } else {
+            if (po_number === "") {
+              continue;
+            } else {
+              if (poOutsHistory.length === 0 || poOutsHistory.length === 1) {
+                continue;
+              }
+
+              const outsChanges = [];
+              const fulfilledData = [];
+
+              let prevPoOuts = null;
+              let fulfilled = null;
+              let notFulfilled = null;
+
+              poOutsHistory.forEach(
+                ({ po_outs, qty_delivery, date_record }) => {
+                  if (prevPoOuts !== null && po_outs !== prevPoOuts) {
+                    const diff = prevPoOuts - po_outs;
+                    fulfilled = diff;
+                    notFulfilled = po_outs - diff;
+                    outsChanges.push({
+                      po_outs: po_outs,
+                      qty_delivery,
+                      date_record,
+                    });
+                    fulfilledData.push({
+                      fulfilled,
+                      not_fulfilled: notFulfilled,
+                      date_record,
+                    });
+                  }
+                  prevPoOuts = po_outs;
+                }
+              );
+              console.log(outsChanges, "outsChanges");
+              console.log(fulfilledData, "fulfilledData");
+
+              // console.log()
+              // if (qtyOuts == null) {
+              //   continue;
+              // } else {
+              //   const historyPOOuts = await db.OFFERS.findOne({
+              //     where: {
+              //       po_number,
+              //       sku_code,
+              //     },
+              //     attributes: ["po_outs_history"],
+              //     raw: true,
+              //   });
+              //   const poOutsHistory = JSON.parse(historyPOOuts.po_outs_history);
+              //   if (!poOutsHistory) {
+              //     await db.OFFERS.update(
+              //       {
+              //         po_outs_history: JSON.stringify([
+              //           {
+              //             po_outs: qtyOuts,
+              //             date_record: moment().format("YYYY-MM-DD"),
+              //           },
+              //         ]),
+              //       },
+              //       {
+              //         where: {
+              //           po_number,
+              //           sku_code,
+              //         },
+              //       }
+              //     );
+              //   } else {
+              //     if (poOutsHistory.length > 0) {
+              //       const lastRecord = poOutsHistory[poOutsHistory.length - 1];
+              //       if (lastRecord.po_outs === qtyOuts) {
+              //         continue;
+              //       }
+              //     }
+
+              //     await db.OFFERS.update(
+              //       {
+              //         po_outs_history: JSON.stringify([
+              //           ...(poOutsHistory || []),
+              //           {
+              //             po_outs: qtyOuts,
+              //             date_record: moment().format("YYYY-MM-DD"),
+              //           },
+              //         ]),
+              //       },
+              //       {
+              //         where: {
+              //           po_number,
+              //           sku_code,
+              //         },
+              //       }
+              //     );
+              //   }
+              // }
+            }
+          }
+        }
+
+        // await dbTransaction.commit();
+        console.log(
+          `[CRON DAILY UPDATING COLUMN HISTORY PO OUTSTANDING 6 MONTH BEFORE] ${moment().format(
+            "DD-MMM-YYYY HH:mm:ss"
+          )} SUCCESS REFRESH COLUMN HISTORY PO OUTSTANDING`
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    null,
+    true
+  );
+};
+
 const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
   const getLineNumber = await OpenQueryGetLineNum(poNumber, skuCode);
-  console.log(getLineNumber);
+
   const getPOOuts = (po) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'SELECT
-      SUM(PO_DISTRIBUTIONS_ALL.QUANTITY_ORDERED - PO_DISTRIBUTIONS_ALL.QUANTITY_DELIVERED - PO_DISTRIBUTIONS_ALL.QUANTITY_CANCELLED) "QUANTITY_OUTSTANDING"
-      FROM APPS.PO_HEADERS_ALL, APPS.PO_LINES_ALL, APPS.PO_DISTRIBUTIONS_ALL
-      WHERE PO_HEADERS_ALL.SEGMENT1 = ''${po}''
-        AND PO_LINES_ALL.LINE_NUM = ''${getLineNumber[0].line_number || 1}''
-        AND PO_DISTRIBUTIONS_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID
-        AND PO_LINES_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID')`;
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT
+    SUM(PO_DISTRIBUTIONS_ALL.QUANTITY_ORDERED - PO_DISTRIBUTIONS_ALL.QUANTITY_DELIVERED - PO_DISTRIBUTIONS_ALL.QUANTITY_CANCELLED) "QUANTITY_OUTSTANDING"
+    FROM APPS.PO_HEADERS_ALL, APPS.PO_LINES_ALL, APPS.PO_DISTRIBUTIONS_ALL
+    WHERE PO_HEADERS_ALL.SEGMENT1 = ''${po.replace(/[^a-zA-Z0-9 ]/g, "")}''
+      AND PO_LINES_ALL.LINE_NUM = ''${getLineNumber[0].line_number || 1}''
+      AND PO_DISTRIBUTIONS_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID
+      AND PO_LINES_ALL.PO_HEADER_ID = PO_HEADERS_ALL.PO_HEADER_ID')`;
 
     return queryWithSchema;
   };
@@ -377,24 +750,28 @@ const OpenQueryPOOuts = async (poNumber, skuCode, transaction) => {
 const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
   const skuSplit = skuCode.split(".");
   const getPODetails = (po, skucode) => {
-    const queryWithSchema = `SELECT * FROM OPENQUERY (TESTDEV,'select aps.vendor_name, pha.segment1, pla.line_num, pla.quantity, 
-    SUM(pda.quantity_ordered-pda.quantity_delivered-pda.quantity_cancelled) qty_outs,pla.line_num line_number, msi.description nama_sku
-    from APPS.po_headers_all pha, APPS.po_lines_all pla, APPS.po_distributions_all pda,
-    APPS.ap_suppliers aps, APPS.mtl_system_items msi
-    where 1=1
-    and pha.segment1 = ''${po}''
-    and pha.po_header_id = pla.po_header_id
-    and pla.po_line_id = pda.po_line_id
-    and msi.segment1 = ''${skucode[0]}''
-    and msi.segment2 = ''${skucode[1]}''
-    and msi.segment3 = ''${skucode[2]}''
-    and pha.vendor_id = aps.vendor_id
-    and pla.item_id = msi.inventory_item_id
-    and msi.organization_id = 101
-    group by aps.vendor_Name, pha.segment1,
-    pla.line_num, pla.quantity,
-    (msi.segment1 || ''.'' || msi.segment2 || ''.'' ||msi.segment3), 
-    msi.description')`;
+    const queryWithSchema = `SELECT * FROM OPENQUERY (ORACLEPROD,'SELECT APS.VENDOR_NAME, PHA.SEGMENT1 PO_NUMBER, PLA.LINE_NUM , PLA.QUANTITY, 
+    SUM(PDA.QUANTITY_ORDERED-PDA.QUANTITY_DELIVERED-PDA.QUANTITY_CANCELLED) QTY_OUTS,
+    PLA.LINE_NUM LINE_NUMBER, MSI.DESCRIPTION NAMA_SKU,FU.USER_NAME BUYER_NAME
+    FROM APPS.PO_HEADERS_ALL PHA, APPS.PO_LINES_ALL PLA, APPS.PO_DISTRIBUTIONS_ALL PDA,
+    APPS.AP_SUPPLIERS APS,APPS.MTL_SYSTEM_ITEMS MSI,APPS.PER_ALL_PEOPLE_F PAP, APPS.FND_USER FU
+    WHERE 1=1
+    AND PHA.SEGMENT1 = ''${po.replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND PHA.PO_HEADER_ID = PLA.PO_HEADER_ID
+    AND PLA.PO_LINE_ID = PDA.PO_LINE_ID
+    AND MSI.SEGMENT1 = ''${skucode[0].replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND MSI.SEGMENT2 = ''${skucode[1].replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND MSI.SEGMENT3 = ''${skucode[2].replace(/[^a-zA-Z0-9 ]/g, "")}''
+    AND PHA.VENDOR_ID = APS.VENDOR_ID
+    AND PLA.ITEM_ID = MSI.INVENTORY_ITEM_ID
+    AND MSI.ORGANIZATION_ID = 101
+    AND PHA.AGENT_ID = PAP.PERSON_ID
+    AND FU.EMPLOYEE_ID = PAP.PERSON_ID 
+    AND PLA.CANCEL_FLAG = ''N''
+    GROUP BY APS.VENDOR_NAME, PHA.SEGMENT1,
+    PLA.LINE_NUM, PLA.QUANTITY,
+    (MSI.SEGMENT1 || ''.'' || MSI.SEGMENT2 || ''.'' ||MSI.SEGMENT3), 
+    MSI.DESCRIPTION,FU.USER_NAME')`;
 
     return queryWithSchema;
   };
@@ -412,3 +789,41 @@ const OpenQueryGetLineNum = async (poNumber, skuCode, transaction) => {
     return [false, null];
   }
 };
+
+// [
+//   { po_outs: 150000, date_record: "2021-08-05" },
+//   { po_outs: 150000, date_record: "2021-08-06" },
+//   { po_outs: 150000, date_record: "2021-08-07" },
+//   { po_outs: 120467, date_record: "2021-08-08" },
+//   { po_outs: 120467, date_record: "2021-08-09" },
+//   { po_outs: 90635, date_record: "2021-08-10" },
+//   { po_outs: 90635, date_record: "2021-08-11" },
+//   { po_outs: 90635, date_record: "2021-08-12" },
+//   { po_outs: 60925, date_record: "2021-08-13" },
+//   { po_outs: 60925, date_record: "2021-08-14" },
+//   { po_outs: 60925, date_record: "2021-08-15" },
+//   { po_outs: 60925, date_record: "2021-08-16" },
+//   { po_outs: 31225, date_record: "2021-08-17" },
+//   { po_outs: 31225, date_record: "2021-08-18" },
+//   { po_outs: 31225, date_record: "2021-08-19" },
+//   { po_outs: 1845, date_record: "2021-08-20" },
+//   { po_outs: 1845, date_record: "2021-08-21" },
+//   { po_outs: 1845, date_record: "2021-08-22" },
+// ];
+
+// [
+//   { po_outs: 150000, date_record: "2021-08-05" },
+//   { po_outs: 120467, date_record: "2021-08-08" },jadwal 1 selesai tanggal 8/8 terpenuhi 29533 sisa 467
+//   { po_outs: 90625, date_record: "2021-08-10" },jadwal 2 selesai tanggal 10/8 terpenuhi 29842 sisa 158
+//   { po_outs: 60925, date_record: "2021-08-13" },jadwal 3 selesai tanggal 13/8 terpenuhi 29700 sisa 300
+//   { po_outs: 31236, date_record: "2021-08-17" },jadwal 4 selesai tanggal 17/8 terpenuhi 29689 sisa 311
+//   { po_outs: 1845, date_record: "2021-08-20" },jadwal 5 selesai tanggal 20/8 terpenuhi 29391 sisa 609
+// ];
+
+// [
+//   { fulfilled: 29533, not_fulfilled: 467, date_record: "2021-08-08" },
+//   { fulfilled: 29842, not_fulfilled: 158, date_record: "2021-08-10" },
+//   { fulfilled: 29700, not_fulfilled: 300, date_record: "2021-08-13" },
+//   { fulfilled: 29689, not_fulfilled: 311, date_record: "2021-08-17" },
+//   { fulfilled: 29391, not_fulfilled: 609, date_record: "2021-08-20" },
+// ];

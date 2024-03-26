@@ -262,6 +262,7 @@ export const UserResetPwd = async (req, res) => {
     const payload = {
       password: newPasswordToHash,
       updated_at: new Date(),
+      updated_by_id: userId,
       password_changed_at: null,
     };
     await db.USERS.update(payload, {

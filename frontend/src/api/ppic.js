@@ -56,10 +56,24 @@ const ppic = {
       url: `/ppic/${id}`,
     });
   },
-  getPODetail: (params) => {
+  getPODetails: (params) => {
     return axios({
       method: "get",
       url: `/ppic/po-details`,
+      params,
+    });
+  },
+  getPODetail: (params) => {
+    return axios({
+      method: "get",
+      url: `/ppic/po-input-detail`,
+      params,
+    });
+  },
+  getPRDetail: (params) => {
+    return axios({
+      method: "get",
+      url: `/ppic/pr-input-detail`,
       params,
     });
   },

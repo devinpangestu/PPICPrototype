@@ -4,6 +4,7 @@ import constant from "constant";
 import utils from "utils";
 import handler from "handler";
 import { api } from "api";
+import moment from "moment";
 
 // const getCurrentTimestamp = () => {
 //   return Math.floor(Date.now() / 1000);
@@ -66,7 +67,6 @@ export const isAccessTokenValid = (accessToken) => {
   api.auth
     .accessTokenCheck(accessToken)
     .then((response) => {
-      console.log(response);
       const rsBody = response.data.rs_body;
       if (!rsBody.valid) {
         utils.swal.Error({
@@ -79,7 +79,8 @@ export const isAccessTokenValid = (accessToken) => {
       }
     })
     .catch((error) => {
-      utils.swal.Error({ msg: utils.getErrMsg(error) });
+      sessionStorage.clear();
+      localStorage.clear();
     });
 };
 
@@ -98,6 +99,14 @@ export const isSessionTabValid = (sessionToken) => {
 export const passwordChangedCheck = (currUserLogin) => {
   //check if the password never changed before because of new user
   if (!currUserLogin.password_changed) {
+    window.location.replace("/change-password");
+    return;
+  }
+
+  if (
+    moment(currUserLogin.password_changed).add(90, "days").format(constant.FORMAT_API_DATE) <
+    moment().format(constant.FORMAT_API_DATE)
+  ) {
     window.location.replace("/change-password");
     return;
   }

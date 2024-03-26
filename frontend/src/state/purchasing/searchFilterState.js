@@ -1,4 +1,4 @@
-import create from "zustand";
+import { create } from "zustand";
 import moment from "moment";
 export const useSearchFilterStore = create((set) => ({
   dateRange: [moment(), moment()],

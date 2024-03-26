@@ -24,9 +24,8 @@ import UserView from "components/pages/admin/users/UserView";
 import NotFoundPage from "NotFoundPage";
 import SuppliersDataView from "components/pages/ppic/suppliers/SuppliersDataView";
 import utils from "utils";
-
+const userInfo = utils.getUserInfo();
 function NoMatch() {
-  const userInfo = utils.getUserInfo();
   const [timeLeft, setTimeLeft] = useState(3);
 
   useEffect(() => {
@@ -36,7 +35,11 @@ function NoMatch() {
       } else if (userInfo.role.id === 3) {
         return window.location.replace("/procurement/dashboard");
       } else if (userInfo.role.id === 4) {
+        return window.location.replace("/procurement/dashboard");
+      } else if (userInfo.role.id === 5) {
         return window.location.replace("/supplier/dashboard");
+      } else if (userInfo.role.id === 6) {
+        return window.location.replace("/ppic/dashboard");
       }
     }
 
@@ -56,15 +59,9 @@ function NoMatch() {
   );
 }
 
-const ppicPermission = ["ppic@view", "ppic@create", "ppic@edit", "ppic@delete"];
+const ppicPermission = ["ppic@view"];
 const supplierPermission = ["supplier@view", "supplier@create", "supplier@edit", "supplier@delete"];
-const purchasingPermission = [
-  "purchasing@view",
-  "purchasing@create",
-  "purchasing@edit",
-  "purchasing@delete",
-];
-
+const purchasingPermission = ["purchasing@view"];
 const adminUserPermission = ["user@view", "user@create", "user@edit", "user@delete"];
 const adminSupplierPermission = [
   "supplier@view",
@@ -127,7 +124,8 @@ const ppicRoutes = [
   {
     path: "/history",
     component: TransactionHistoryView,
-    permissions: ppicPermission,
+    permissions:
+      userInfo?.role?.id === 1 || userInfo?.role?.id === 2 ? ppicPermission : purchasingPermission,
   },
 ];
 
@@ -144,6 +142,20 @@ const purchasingRoutes = [
     path: "/procurement/dashboard",
     component: PurchasingView,
     permissions: purchasingPermission,
+  },
+  {
+    path: "/history",
+    component: TransactionHistoryView,
+    permissions:
+      userInfo?.role?.id === 3 || userInfo?.role?.id === 4 ? purchasingPermission : ppicPermission,
+  },
+];
+
+const qaqcRoutes = [
+  {
+    path: "/ppic/dashboard",
+    component: PPICView,
+    permissions: ppicPermission,
   },
 ];
 
@@ -162,9 +174,10 @@ export const routes = [
   // { path: "/maintenance", component: MaintenancePage, public: true },
   // { path: "/deprecated", component: DeprecatedPage, public: true },
   // { path: "/restricted", component: RestrictedPage, public: true },
-  ...supplierRoutes,
-  ...purchasingRoutes,
   ...ppicRoutes,
+  ...purchasingRoutes,
+  ...supplierRoutes,
+  ...qaqcRoutes,
   ...adminRoutes,
   {
     path: "/",

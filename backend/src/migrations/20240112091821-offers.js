@@ -4,6 +4,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("offers", {
       id: {
+        allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.NUMERIC,
@@ -16,10 +17,7 @@ module.exports = {
 
       supplier_id: {
         type: Sequelize.NUMERIC,
-        references: {
-          model: "SUPPLIERS",
-          key: "ref_id",
-        },
+        defaultValue: null,
       },
       po_number: {
         defaultValue: null,
@@ -68,6 +66,14 @@ module.exports = {
         defaultValue: Sequelize.NOW,
         type: Sequelize.DATE,
       },
+      send_supplier_date: {
+        defaultValue: null,
+        type: Sequelize.DATE,
+      },
+      supplier_confirm_date: {
+        defaultValue: null,
+        type: Sequelize.DATE,
+      },
       hutang_kirim: {
         defaultValue: false,
         type: Sequelize.BOOLEAN,
@@ -103,9 +109,17 @@ module.exports = {
       updated_at: { defaultValue: null, type: Sequelize.DATE },
       deleted_by_id: { defaultValue: null, type: Sequelize.NUMERIC },
       deleted_at: { defaultValue: null, type: Sequelize.DATE },
+      po_outs_history: {
+        defaultValue: JSON.stringify([]),
+        type: Sequelize.TEXT,
+      },
+      po_outs_changes: {
+        defaultValue: JSON.stringify([]),
+        type: Sequelize.TEXT,
+      },
     });
   },
   async down(queryInterface, Sequelize) {
-    // await queryInterface.dropTable("offers");
+    await queryInterface.dropTable("offers");
   },
 };

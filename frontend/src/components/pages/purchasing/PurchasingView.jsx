@@ -22,6 +22,7 @@ import {
   Space,
   Table,
   Card,
+  Tooltip,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -38,9 +39,16 @@ import moment from "moment";
 
 import handler from "handler";
 import ModalReturSchedule from "./modal/ModalReturSchedule";
-import { authorizationCheck, isAccessTokenValid, isMobile, isSessionTabValid, passwordChangedCheck } from "utils/auth";
+import {
+  authorizationCheck,
+  isAccessTokenValid,
+  isMobile,
+  isSessionTabValid,
+  passwordChangedCheck,
+} from "utils/auth";
 import { Decrypt } from "utils/encryption";
 import { renderPlainColFindLabel } from "utils/table";
+import ModalExport from "components/ModalExport";
 
 const EditableContext = React.createContext(null);
 const EditableRow = ({ index, ...props }) => {
@@ -184,6 +192,7 @@ const PurchasingView = (props) => {
   const statusMapping = {
     B: "Schedule from PPIC",
     D: "Revised from PPIC",
+    E: "At Supplier",
     F: "Negotiation from Supplier",
     X: "Completed",
   };
@@ -201,14 +210,29 @@ const PurchasingView = (props) => {
 
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
-      if (record.edit_from_id !== null) {
+      if (
+        record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+        record.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+      ) {
+        return (
+          <p style={{ margin: 0, fontSize: "1rem" }}>
+            {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
+              constant.FORMAT_DISPLAY_DATETIME,
+            )} `}
+            <strong>{`${JSON.parse(record.notes)?.init?.created_by} : ${
+              JSON.parse(record.notes)?.init?.notes
+            }`}</strong>
+          </p>
+        );
+      } else if (record.edit_from_id !== null) {
         return (
           <p style={{ margin: 0 }}>
             {`${moment(JSON.parse(record.notes)?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.created_by} : ${
+            )}`}{" "}
+            <strong>{`${JSON.parse(record.notes)?.edit_req?.created_by} : ${
               JSON.parse(record.notes)?.edit_req?.notes
-            }`}
+            }`}</strong>
           </p>
         );
       } else if (record.split_from_id !== null) {
@@ -216,19 +240,25 @@ const PurchasingView = (props) => {
           <p style={{ margin: 0 }}>
             {`${moment(JSON.parse(record.notes)?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.created_by} : ${
-              JSON.parse(record.notes)?.split_req?.notes
-            } `}
+            )}`}
+            <strong>
+              {`${JSON.parse(record.notes)?.created_by} : ${
+                JSON.parse(record.notes)?.split_req?.notes
+              }`}
+            </strong>
           </p>
         );
-      } else {
-        return null;
       }
     },
     rowExpandable: (record) => {
       const checkFlagStatus = (record) =>
-        record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
-        (JSON.parse(record.notes)?.edit_req?.notes || JSON.parse(record.notes)?.split_req?.notes);
+        (record.flag_status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
+          record.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
+          record.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST) &&
+        (JSON.parse(record.notes)?.init?.notes ||
+          JSON.parse(record.notes)?.retur?.notes ||
+          JSON.parse(record.notes)?.edit_req?.notes ||
+          JSON.parse(record.notes)?.split_req?.notes);
       return checkFlagStatus(record);
     },
   });
@@ -236,6 +266,8 @@ const PurchasingView = (props) => {
   const {
     modalImportCSVShow,
     setModalImportCSVShow,
+    modalExportShow,
+    setModalExportShow,
     modalCreateShow,
     setModalCreateShow,
     modalSplitScheduleShow,
@@ -334,47 +366,73 @@ const PurchasingView = (props) => {
   };
 
   const fetchData = async (params) => {
-    let errMsg;
     setPageLoading(true);
-
     try {
       const responseList = await api.purchasing.list(search, 1000, 1, params);
-
       const rsBodyList = responseList.data.rs_body;
+      const offerData = rsBodyList.offer.filter((offer) => !offer.deleted_at);
+      // const offerDataCheckList = rsBodyList.offer.filter(
+      //   (item) =>
+      //     item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
+      //     item.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST &&
+      //     item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC &&
+      //     item.flag_status !== constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT &&
+      //     item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+      //     item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
+      //     !item.deleted_at,
+      // );
+      setDataSource([...offerData]);
+      if (
+        !filteredInfo.po_number &&
+        !filteredInfo.sku_code &&
+        !filteredInfo.sku_name &&
+        !filteredInfo.supplier_name &&
+        !filteredInfo.buyer_name &&
+        !filteredInfo.io_filter &&
+        !filteredInfo.category_filter
+      ) {
+        setOldDataSource(offerData.map((offer, index) => ({ key: index + 1, ...offer })));
 
-      setOffers(rsBodyList.offer);
-      setTotalData(rsBodyList.total);
-      setOldDataSource(rsBodyList.offer.map((offer, index) => ({ key: index + 1, ...offer })));
-      setDataSource(rsBodyList.offer.map((offer, index) => ({ key: index + 1, ...offer })));
+        setOffers([...offerData]);
+        setTotalData(offerData.length);
 
-      if (rsBodyList.offer && rsBodyList.offer.length > 0) {
-        setPreviewRowChecked(
-          rsBodyList.offer
-            .filter(
-              (item) =>
-                item.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE &&
-                item.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST,
-            )
-            .map(() => false),
-        );
+        if (offerData.length > 0) {
+          setPreviewRowChecked(rsBodyList.offer.map(() => false));
+          setArrayOfMerge(
+            offerData.map((currRow, index) => {
+              const nextRow = offerData[index + 1];
+              return (
+                nextRow &&
+                currRow.supplier_id === nextRow.supplier_id &&
+                currRow.po_number === nextRow.po_number &&
+                currRow.sku_code === nextRow.sku_code &&
+                currRow.po_qty === nextRow.po_qty &&
+                currRow.flag_status === nextRow.flag_status &&
+                currRow.split_from_id === nextRow.split_from_id
+              );
+            }),
+          );
+          setEditTableMode(false);
+        } else {
+          setPreviewRowChecked([]);
+          setArrayOfMerge([]);
+        }
+      } else {
         setArrayOfMerge(
-          rsBodyList.offer.map((currRow, index) => {
-            const nextRow = rsBodyList.offer[index + 1];
+          offerData.map((currRow, index) => {
+            const nextRow = offerData[index + 1];
             return (
               nextRow &&
               currRow.supplier_id === nextRow.supplier_id &&
               currRow.po_number === nextRow.po_number &&
               currRow.sku_code === nextRow.sku_code &&
               currRow.po_qty === nextRow.po_qty &&
+              currRow.flag_status === nextRow.flag_status &&
               currRow.split_from_id === nextRow.split_from_id
             );
           }),
         );
-
-        setEditTableMode(false);
-      } else {
-        setPreviewRowChecked([]);
-        setArrayOfMerge([]);
+        setPreviewRowChecked(rsBodyList.offer.map(() => false));
       }
     } catch (error) {
       utils.swal.Error({ msg: utils.getErrMsg(error) });
@@ -400,9 +458,10 @@ const PurchasingView = (props) => {
     }
   };
   const handleChange = (pagination, filters, sorter, extra) => {
-    console.log("Various parameters", pagination, filters, sorter);
     setFilteredInfo(filters);
     setSortedInfo(sorter);
+    setPreviewRowChecked(extra.currentDataSource.map(() => false));
+    setToggleCheckboxTitle(false);
     if (
       !filteredInfo.po_number &&
       !filteredInfo.sku_code &&
@@ -412,9 +471,9 @@ const PurchasingView = (props) => {
       !filteredInfo.io_filter &&
       !filteredInfo.category_filter
     ) {
-      setDataSource(extra.currentDataSource);
-    } else {
       setDataSource(oldDataSource);
+    } else {
+      setDataSource(extra.currentDataSource);
     }
   };
   const loadSuppliersOption = async () => {
@@ -434,7 +493,7 @@ const PurchasingView = (props) => {
         status === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
       ) {
         Modal.error({
-          content: "Please fill PO Number first",
+          content: "Please fill the empty column first",
         });
       }
 
@@ -443,6 +502,12 @@ const PurchasingView = (props) => {
           content: "This data is already completed",
         });
       }
+      if (status === constant.FLAG_STATUS_PPIC_REQUEST) {
+        Modal.error({
+          content: "This data is in negotiation process",
+        });
+      }
+      updatedPreviewRowChecked[index] = false;
     }
     setPreviewRowChecked(updatedPreviewRowChecked);
   };
@@ -480,35 +545,7 @@ const PurchasingView = (props) => {
   useEffect(() => {
     let isMounted = true;
     if (isMounted) {
-      api.purchasing
-        .needActionMinDate()
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          setDateRange([moment(rsBody.min_date), moment()]);
-          const otherParams = {
-            from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
-            to_date: moment().format(constant.FORMAT_API_DATE),
-            supplier_id: suppliersSearch ?? null,
-            user_id: filterValue?.user_id ?? Decrypt(userInfo.user_id) ?? null,
-            io_filter: filterValue?.io_filter ?? null,
-            category_filter: filterValue?.category_filter ?? null,
-            status: filterStatus,
-          };
-          fetchSummary(otherParams);
-          fetchData(otherParams);
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setFilterValue({
-            user_id: Decrypt(userInfo.user_id),
-          });
-          form.setFieldsValue({
-            user_filter: userInfo.user_name,
-          });
-          setMinDateLoaded(true);
-        });
+      loadMinDate();
       loadSuppliersOption();
       authorizationCheck(userInfo);
       passwordChangedCheck(userInfo);
@@ -564,6 +601,41 @@ const PurchasingView = (props) => {
   //   loadOffers();
   //   fetchSummary(filterValue);
   // }, [filterStatus]);
+  const loadMinDate = async () => {
+    await api.purchasing
+      .needActionMinDate()
+      .then(function (response) {
+        const rsBody = response.data.rs_body;
+        setDateRange([moment(rsBody.min_date), moment()]);
+        const otherParams = {
+          from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
+          to_date: moment().format(constant.FORMAT_API_DATE),
+          supplier_id: filterValue?.supplier_id ?? null,
+          user_id:
+            filterValue?.user_id ?? userInfo.role.id !== 6
+              ? Decrypt(userInfo.user_id)
+              : null ?? null,
+          io_filter: filterValue?.io_filter ?? null,
+          category_filter: filterValue?.category_filter ?? null,
+          status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
+          search_PO: filterValue?.search_PO,
+        };
+        fetchSummary(otherParams);
+      })
+      .catch(function (error) {
+        utils.swal.Error({ msg: utils.getErrMsg(error) });
+      })
+      .finally(function () {
+        setFilterValue({
+          user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
+        });
+        form.setFieldsValue({
+          user_filter: userInfo.user_name,
+        });
+        setMinDateLoaded(true);
+      });
+  };
+
   const loadOffers = async () => {
     let errMsg;
 
@@ -671,9 +743,9 @@ const PurchasingView = (props) => {
       ...new Set(
         offers.map((item) => {
           if (dataIndex === "supplier_name") {
-            return item.supplier.name;
+            return item?.supplier?.name;
           } else if (dataIndex === "sku_name") {
-            return item.sku_name;
+            return item?.sku_name;
           } else if (dataIndex === "buyer_name") {
             return item?.buyer?.name;
           } else {
@@ -759,50 +831,77 @@ const PurchasingView = (props) => {
       title: (_, record, index) => {
         if (
           editTableMode ||
-          filteredInfo.po_number ||
-          filteredInfo.sku_code ||
-          filteredInfo.sku_name ||
-          filteredInfo.supplier_name ||
-          filteredInfo.io_filter ||
-          filteredInfo.category_filter ||
-          sortedInfo.column ||
-          filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE
-        ) {
-          return;
-        }
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            constant.FLAG_STATUS_PPIC_INIT,
+            constant.FLAG_STATUS_PROCUREMENT_RETUR,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
+        )
+          if (
+            // filteredInfo.po_number ||
+            // filteredInfo.sku_code ||
+            // filteredInfo.sku_name ||
+            // filteredInfo.supplier_name ||
+            // filteredInfo.io_filter ||
+            // filteredInfo.category_filter ||
+            sortedInfo.column ||
+            filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            filterStatus === constant.FLAG_STATUS_SUPPLIER
+          ) {
+            return;
+          }
         const isDataComplete = (record) => {
           const flagStatus = record?.flag_status;
-          const poNumber = record?.po_number;
           switch (filterStatus) {
             case constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC:
               return !(
-                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber)
+                (
+                  flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                  flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
+                )
+                // ||
+                // utils.isNull(poNumber) ||
+                // utils.isNull(ioFilter) ||
+                // utils.isNull(categoryFilter) ||
+                // utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT:
               return !(
-                flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                utils.isNull(poNumber)
+                (
+                  flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+                  flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC
+                )
+                // ||
+                // utils.isNull(poNumber) ||
+                // utils.isNull(ioFilter) ||
+                // utils.isNull(categoryFilter) ||
+                // utils.isNull(supplierName)
               );
             case constant.FLAG_STATUS_PROCUREMENT_REQUEST:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
-                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT ||
-                utils.isNull(poNumber)
+                flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
               );
             default:
               return !(
                 flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+                flagStatus === constant.FLAG_STATUS_PPIC_INIT ||
                 flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
-                utils.isNull(poNumber)
+                flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+                flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+                flagStatus === constant.FLAG_STATUS_SUPPLIER
               );
           }
         };
+
         return (
           <>
             <Checkbox
@@ -811,14 +910,14 @@ const PurchasingView = (props) => {
               onChange={(e) => {
                 const isChecked = e.target.checked;
                 const updatedPreviewRowChecked = previewRowChecked.map(
-                  (_, i) => isChecked && isDataComplete(offers[i]) && toggleCheckboxTitle,
+                  (_, i) =>
+                    dataSource && isChecked && isDataComplete(dataSource[i]) && toggleCheckboxTitle,
                 );
                 setPreviewRowChecked(updatedPreviewRowChecked);
               }}
               onClick={(e) => {
                 e.stopPropagation();
                 setToggleCheckboxTitle(!toggleCheckboxTitle);
-                console.log(previewRowChecked);
               }}
             />
           </>
@@ -827,41 +926,68 @@ const PurchasingView = (props) => {
       dataIndex: "check",
       key: "check",
       width: 25,
-      render: (_, record, index) => {
-        if (editTableMode) return;
-        if (filterStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) return;
-        if (filterStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST) return;
+      render: (_v, record, index) => {
+        const flagStatus = record?.flag_status;
         if (
-          !filterStatus &&
-          (record?.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
-            record?.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST)
+          editTableMode ||
+          [
+            constant.FLAG_STATUS_COMPLETE_SCHEDULE,
+            constant.FLAG_STATUS_PPIC_REQUEST,
+            // constant.FLAG_STATUS_B,
+            // constant.FLAG_STATUS_D,
+            constant.FLAG_STATUS_PROCUREMENT_REQUEST,
+            constant.FLAG_STATUS_SUPPLIER,
+            "deleted",
+          ].includes(filterStatus)
         )
           return;
+        if (
+          !filterStatus &&
+          (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+            flagStatus === constant.FLAG_STATUS_PPIC_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+            flagStatus === constant.FLAG_STATUS_PPIC_INIT ||
+            flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+            flagStatus === constant.FLAG_STATUS_SUPPLIER)
+        )
+          return;
+
         const isDataComplete = (record) => {
           const poNumber = record?.po_number;
+          const ioFilter = record?.io_filter;
+          const categoryFilter = record?.category_filter;
+          const supplierName = record?.supplier?.name;
           const flagStatus = record?.flag_status;
 
-          return !(utils.isNull(poNumber) || flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE);
+          return (
+            (record.flag_status !== constant.FLAG_STATUS_COMPLETE_SCHEDULE ||
+              record.flag_status !== constant.FLAG_STATUS_PPIC_REQUEST ||
+              record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_RETUR ||
+              record.flag_status !== constant.FLAG_STATUS_PPIC_INIT ||
+              record.flag_status !== constant.FLAG_STATUS_PROCUREMENT_REQUEST ||
+              record.flag_status !== constant.FLAG_STATUS_SUPPLIER) &&
+            !(
+              utils.isNull(poNumber) ||
+              utils.isNull(ioFilter) ||
+              utils.isNull(categoryFilter) ||
+              utils.isNull(supplierName) ||
+              flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE
+            )
+          );
         };
+
         const initialChecked = isDataComplete(record);
 
         return (
           <>
-            {record?.po_number !== "" ? (
-              <Checkbox
-                checked={previewRowChecked[index]}
-                style={{ justifyContent: "center", display: "flex" }}
-                onChange={() => {
-                  handleCheckboxChange(index, initialChecked, record?.flag_status);
-                }}
-                onClick={() => {
-                  console.log(previewRowChecked);
-                }}
-              />
-            ) : (
-              // Render something else, or nothing, when po_number is null
-              <Tag color="error">Fill PO</Tag>
-            )}
+            <Checkbox
+              checked={previewRowChecked[index]}
+              style={{ justifyContent: "center", display: "flex" }}
+              onChange={() => {
+                handleCheckboxChange(index, initialChecked, record?.flag_status);
+              }}
+              onClick={() => {}}
+            />
           </>
         );
       },
@@ -871,7 +997,7 @@ const PurchasingView = (props) => {
       dataIndex: "io_filter",
       key: "io_filter",
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("io_filter"),
       filteredValue: filteredInfo?.io_filter || null,
       onFilter: (value, record) => {
@@ -891,7 +1017,7 @@ const PurchasingView = (props) => {
       dataIndex: "category_filter",
       key: "category_filter",
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("category_filter"),
       filteredValue: filteredInfo?.category_filter || null,
       onFilter: (value, record) => {
@@ -913,7 +1039,7 @@ const PurchasingView = (props) => {
       sorter: (a, b) => {
         return moment(a.submission_date) - moment(b.submission_date);
       },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE);
@@ -929,19 +1055,33 @@ const PurchasingView = (props) => {
         return record?.supplier?.name.includes(value);
       },
       filterSearch: true,
+
       render: (_, row) => {
-        return row?.supplier?.name;
+        if (editTableMode) {
+          return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
+        }
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={
+              row?.supplier?.name + " " + (row?.user_supplier?.email ? "" : "Email not registered")
+            }
+          >
+            {row?.supplier?.name} <br />
+            {row?.user_supplier?.email ? "" : <b>Email not registered</b>}
+          </Tooltip>
+        );
       },
-      width: 100,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      width: 250,
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("No PR/PO"),
       dataIndex: "po_number",
       key: "po_number",
-      width: "10vw",
+      width: 110,
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
 
       filters: filterColumnOpt("po_number"),
       filteredValue: filteredInfo.po_number || null,
@@ -965,7 +1105,7 @@ const PurchasingView = (props) => {
       sorter: (a, b) => {
         return moment(a.po_qty) - moment(b.po_qty);
       },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         const poQty = utils.thousandSeparator(row.po_qty);
@@ -980,7 +1120,7 @@ const PurchasingView = (props) => {
         return moment(a.po_outs) - moment(b.po_outs);
       },
       // editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row.po_outs);
@@ -996,7 +1136,17 @@ const PurchasingView = (props) => {
       onFilter: (value, record) => record?.sku_code.includes(value),
       filterSearch: true,
       width: 150,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_code}>
+            {row?.sku_code}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("SKUName"),
@@ -1007,7 +1157,17 @@ const PurchasingView = (props) => {
       onFilter: (value, record) => record?.sku_name.includes(value),
       filterSearch: true,
       width: 100,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_name}>
+            {row?.sku_name}
+          </Tooltip>
+        );
+      },
     },
     {
       title: t("qtyDelivery"),
@@ -1018,7 +1178,7 @@ const PurchasingView = (props) => {
       key: "qty_delivery",
       width: 100,
       render: (_, row) => {
-        return utils.thousandSeparator(row.qty_delivery);
+        return utils.thousandSeparator(row?.qty_delivery);
       },
     },
     {
@@ -1030,7 +1190,35 @@ const PurchasingView = (props) => {
       key: "est_delivery",
       width: 100,
       render: (_, row) => {
-        return moment(row.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+        return moment(row?.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+      },
+    },
+    {
+      title: t("sendSupplierDate"),
+      dataIndex: "send_supplier_date",
+      sorter: (a, b) => {
+        return moment(a.send_supplier_date) - moment(b.send_supplier_date);
+      },
+      key: "send_supplier_date",
+      width: 100,
+      render: (_, row) => {
+        return row.send_supplier_date
+          ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
+    {
+      title: t("supplierConfirmDate"),
+      dataIndex: "supplier_confirm_date",
+      sorter: (a, b) => {
+        return moment(a.supplier_confirm_date) - moment(b.supplier_confirm_date);
+      },
+      key: "supplier_confirm_date",
+      width: 100,
+      render: (_, row) => {
+        return row.supplier_confirm_date
+          ? moment(row.supplier_confirm_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
       },
     },
 
@@ -1040,7 +1228,7 @@ const PurchasingView = (props) => {
       key: "submitted_qty",
       width: 100,
       render: (_, row) => {
-        return utils.thousandSeparator(row.submitted_qty);
+        return utils.thousandSeparator(row?.submitted_qty);
       },
     },
     {
@@ -1059,7 +1247,7 @@ const PurchasingView = (props) => {
       dataIndex: "buyer_name",
       key: "buyer_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: filterColumnOpt("buyer_name"),
       filteredValue: filteredInfo?.buyer_name || null,
       onFilter: (value, record) => {
@@ -1093,12 +1281,14 @@ const PurchasingView = (props) => {
         let btnSplit;
         let btnRetur;
         let tagStatus;
+        let tagHutangKirim;
         let btnAcceptSplit;
         let btnRejectSplit;
         let btnAcceptEdit;
         let btnRejectEdit;
         let btnAcceptClosePO;
         let btnRejectClosePO;
+
         const flagStatus = row.flag_status;
         const renderConfirmationModal = (api, text) => {
           Modal.confirm({
@@ -1132,68 +1322,94 @@ const PurchasingView = (props) => {
             },
           });
         };
-        const renderStatusTag = (color, text) => (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <Tag color={color}>{text}</Tag>
+
+        const renderTag = (color, text) => (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <Tag color={color} style={{ whiteSpace: "normal", textAlign: "center" }}>
+              {text}
+            </Tag>
           </div>
         );
-        if (flagStatus === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
-          return renderStatusTag("success", "Completed");
+        const renderStatusTag = (tagType, tagText) => {
+          const tagHutangKirim2 = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+          const tagStatus2 = renderTag(tagType, tagText);
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {tagHutangKirim2}
+              {tagStatus2}
+            </div>
+          );
+        };
+        tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+        if (row.deleted_at !== null) {
+          tagStatus = renderTag("error", "Deleted");
         }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
+        ) {
+          tagStatus = renderTag("error", "at PPIC (retur)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
+          tagStatus = renderTag("error", `at Supplier ${row?.supplier?.name}`);
+        }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.split_from_id !== null
+        ) {
+          tagStatus = renderTag("warning", "Split Request (Supplier to Procurement)");
+        }
+        if (
+          row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
+          row.edit_from_id !== null
+        ) {
+          tagStatus = renderTag("warning", "Edit Request (Supplier to Procurement)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.split_from_id !== null) {
+          tagStatus = renderTag("warning", "Split Request (Supplier to PPIC)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && row.edit_from_id !== null) {
+          tagStatus = renderTag("warning", "Edit Request (Supplier to PPIC)");
+        }
+        if (row.flag_status === constant.FLAG_STATUS_COMPLETE_SCHEDULE) {
+          tagStatus = renderTag("success", "Completed");
+        }
+
+        if (editTableMode) return;
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.hutang_kirim &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Close PO Request");
+          tagStatus = renderTag("warning", "Close PO Request");
         }
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.split_from_id !== null &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Split Request");
+          tagStatus = renderTag("warning", "Split Request");
         }
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
           row.edit_from_id !== null &&
           editTableMode
         ) {
-          return renderStatusTag("warning", "Edit Request");
+          tagStatus = renderTag("warning", "Edit Request");
         }
-        if (editTableMode) return;
+
         if (
           flagStatus === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
           flagStatus === constant.FLAG_STATUS_PPIC_SEND_RETUR_PROCUREMENT
         ) {
-          btnEdit = (
-            <Button
-              className="mr-1 mb-1"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalEditData(row.id);
-                setModalEditShow(true);
-              }}
-              style={{ justifyContent: "center", display: "flex" }}
-            >
-              {t("Edit")}
-            </Button>
-          );
-          btnSplit = (
-            <Button
-              className="mr-1 mb-1"
-              size="small"
-              type="primary"
-              onClick={() => {
-                setModalSplitScheduleData(row);
-                setModalSplitScheduleShow(true);
-              }}
-              style={{ justifyContent: "center", display: "flex" }}
-            >
-              {t("Split")}
-            </Button>
-          );
+          tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
           btnRetur = (
             <Button
               className="mr-1 mb-1"
@@ -1208,18 +1424,12 @@ const PurchasingView = (props) => {
               {t("Retur")}
             </Button>
           );
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              {/* {btnSplit} */}
-              {/* {btnEdit} */}
-              {btnRetur}
-            </div>
-          );
         }
 
         if (row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST && !editTableMode) {
           if (row.split_from_id !== null) {
             tagStatus = <Tag color="warning">Split Request</Tag>;
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             btnAcceptSplit = (
               <Button
                 className="mr-1 mt-2"
@@ -1254,6 +1464,7 @@ const PurchasingView = (props) => {
             );
           } else if (row.edit_from_id !== null) {
             tagStatus = <Tag color="warning">Edit Request</Tag>;
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             btnAcceptEdit = (
               <Button
                 className="mr-1 mt-2"
@@ -1263,11 +1474,11 @@ const PurchasingView = (props) => {
                 onClick={() =>
                   renderConfirmationModal(
                     api.purchasing.acceptEdit,
-                    `Are you sure to accept this close PO request and forward to PPIC?`,
+                    `Are you sure to accept this edit request and forward to PPIC?`,
                   )
                 }
               >
-                {`Accept Close PO`}
+                {`Accept Edit`}
               </Button>
             );
             btnRejectEdit = (
@@ -1287,6 +1498,7 @@ const PurchasingView = (props) => {
               </Button>
             );
           } else if (row.hutang_kirim) {
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
             tagStatus = <Tag color="warning">Close PO Request</Tag>;
             btnAcceptClosePO = (
               <Button
@@ -1321,18 +1533,45 @@ const PurchasingView = (props) => {
               </Button>
             );
           }
-          return (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              {tagStatus}
-              {btnAcceptSplit}
-              {btnRejectSplit}
-              {btnAcceptEdit}
-              {btnRejectEdit}
-              {btnAcceptClosePO}
-              {btnRejectClosePO}
-            </div>
-          );
         }
+        if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST && !editTableMode) {
+          if (row.split_from_id !== null) {
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Split Request at PPIC
+              </Tag>
+            );
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+          } else if (row.edit_from_id !== null) {
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Edit Request at PPIC
+              </Tag>
+            );
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+          } else if (row.hutang_kirim) {
+            tagHutangKirim = row.hutang_kirim ? <Tag color="red">Hutang Kirim</Tag> : null;
+            tagStatus = (
+              <Tag color="warning" style={{ whiteSpace: "normal", textAlign: "center" }}>
+                Close PO Request at
+              </Tag>
+            );
+          }
+        }
+
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            {tagHutangKirim}
+            {tagStatus}
+            {btnRetur}
+            {btnAcceptSplit}
+            {btnRejectSplit}
+            {btnAcceptEdit}
+            {btnRejectEdit}
+            {btnAcceptClosePO}
+            {btnRejectClosePO}
+          </div>
+        );
       },
     },
   ];
@@ -1360,15 +1599,23 @@ const PurchasingView = (props) => {
     if (!values) {
       return;
     }
+    console.log(values);
     let newFilterValue = {};
     if (values.supplier_list) {
       newFilterValue.supplier_id = values.supplier_list;
     }
-
-    if (values.user_filter?.length > 4) {
-      newFilterValue.user_id = Decrypt(userInfo.user_id);
+    if (values.user_filter) {
+      if (values.user_filter?.length > 4) {
+        newFilterValue.user_id = Decrypt(userInfo.user_id);
+      } else {
+        newFilterValue.user_id = values.user_filter;
+      }
     } else {
-      newFilterValue.user_id = values.user_filter;
+      if (utils.havePermission(userInfo.permissions, "purchasing@admin")) {
+        newFilterValue.user_id = null;
+      } else {
+        newFilterValue.user_id = Decrypt(userInfo.user_id);
+      }
     }
     if (values.io_filter) {
       newFilterValue.io_filter = values.io_filter;
@@ -1525,12 +1772,12 @@ const PurchasingView = (props) => {
                 </>
               )}
             </Space>
-
-            {!editTableMode && (
+            {editTableMode && (
               <Table
                 {...tableProps}
                 dataSource={dataSource}
                 components={components}
+                rowKey="id"
                 rowClassName={rowClassName}
                 columns={columns}
                 pagination={{
@@ -1544,11 +1791,12 @@ const PurchasingView = (props) => {
                 onChange={handleChange}
               />
             )}
-            {editTableMode && (
+            {!editTableMode && (
               <Table
                 {...tableProps}
                 dataSource={dataSource}
                 components={components}
+                rowKey="id"
                 rowClassName={rowClassName}
                 columns={columns}
                 pagination={{
@@ -1622,6 +1870,18 @@ const PurchasingView = (props) => {
         </Link>,
         "offer@create",
       )}
+      btnAction={utils.renderWithPermission(
+        userInfo.permissions,
+        <Button
+          size="small"
+          onClick={() => {
+            setModalExportShow(true);
+          }}
+        >
+          {t("exportXLSX")}
+        </Button>,
+        "purchasing@view",
+      )}
       breadcrumbs={[
         {
           text: t("Procurement"),
@@ -1652,6 +1912,12 @@ const PurchasingView = (props) => {
           fetchSummary(otherParams);
         }}
         data={modalSplitScheduleData}
+      />
+      <ModalExport
+        visible={modalExportShow}
+        onCancel={() => setModalExportShow(false)}
+        data={dataSource}
+        exportType={"purchasing"}
       />
       <ModalCreate
         visible={modalCreateShow}
@@ -1758,7 +2024,7 @@ const PurchasingView = (props) => {
                           status: filterStatus,
                           search_PO: filterValue?.search_PO,
                         };
-                        console.log("triggered4");
+
                         fetchSummary(otherParams);
                       }}
                       allowClear={false}
@@ -1766,18 +2032,22 @@ const PurchasingView = (props) => {
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="Buyer" name="user_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select Buyer"
-                      optionFilterProp="children"
-                      // onChange={onChangeUserList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={purchasing}
-                      defaultValue={userInfo.user_name}
-                    />
-                  </Form.Item>
+                  {utils.renderWithPermission(
+                    userInfo.permissions,
+                    <Form.Item label="Buyer" name="user_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select Buyer"
+                        optionFilterProp="children"
+                        // onChange={onChangeUserList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={purchasing}
+                        defaultValue={userInfo.user_name}
+                      />
+                    </Form.Item>,
+                    "purchasing@admin",
+                  )}
                 </Col>
                 {/* <Col span={12}>
                   <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">

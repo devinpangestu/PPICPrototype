@@ -119,12 +119,11 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     let modalConfirmObj = {};
     if (autoFill) {
       modalConfirmObj = {
-        po_number: values.po_number,
+        po_number: utils.removeNonPrintableCharacters(values.po_number),
         line_num: values.line_num,
         auto_fill: true,
       };
     } else {
-      console.log("sini");
       modalConfirmObj = {
         id,
         is_edit: isEdit,
@@ -135,19 +134,18 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
           ref_id: values.supplier_name,
           name: suppliers.find((sup) => sup.value === values.supplier_name).label,
         },
-        po_number: values.po_number,
+        po_number: utils.removeNonPrintableCharacters(values.po_number),
         po_qty: parseInt(values.po_qty),
         po_outs: parseInt(values.po_outs),
-        sku_code: values.sku_code,
-        sku_name: values.sku_name,
+        sku_code: utils.removeNonPrintableCharacters(values.sku_code),
+        sku_name: utils.removeNonPrintableCharacters(values.sku_name),
         qty_delivery: parseInt(values.qty_delivery),
         est_delivery: moment(values.est_delivery).format(constant.FORMAT_API_DATE),
+        notes: values.notes,
         auto_fill: false,
       };
-      console.log("sini2");
     }
     if (isEdit) {
-      console.log("sini3");
       api.ppic
         .edit(modalConfirmObj)
         .then(function (response) {
@@ -162,16 +160,20 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     } else {
       if (autoFill) {
         const dataToShow = await api.ppic
-          .getPODetail(modalConfirmObj)
+          .getPODetails(modalConfirmObj)
           .then(function (response) {
             modalConfirmObj.submission_date = moment(values.submission_date);
             modalConfirmObj.io_filter = values.io_filter;
             modalConfirmObj.category_filter = values.category_filter;
-            modalConfirmObj.po_number = values.po_number;
+            modalConfirmObj.po_number = utils.removeNonPrintableCharacters(values.po_number);
             modalConfirmObj.po_qty = response.data.rs_body.QUANTITY;
             modalConfirmObj.po_outs = response.data.rs_body.QTY_OUTS;
-            modalConfirmObj.sku_code = response.data.rs_body.KODE_SKU;
-            modalConfirmObj.sku_name = response.data.rs_body.NAMA_SKU;
+            modalConfirmObj.sku_code = utils.removeNonPrintableCharacters(
+              response.data.rs_body.KODE_SKU,
+            );
+            modalConfirmObj.sku_name = utils.removeNonPrintableCharacters(
+              response.data.rs_body.NAMA_SKU,
+            );
             modalConfirmObj.line_num = response.data.rs_body.LINE_NUM;
             modalConfirmObj.supplier_name = response.data.rs_body.VENDOR_NAME;
             modalConfirmObj.qty_delivery = parseInt(values.qty_delivery);
@@ -227,250 +229,222 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
       />
       <SyncOverlay loading={pageLoading} />
       <Form form={form} onFinish={handleOnSubmit} autoComplete="off" layout="vertical">
-        {autoFill ? (
-          <>
-            <Form.Item
-              name="submission_date"
-              label={t("submissionDate")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("submissionDate")}`,
-                },
-              ]}
-            >
-              <DatePicker
-                allowClear={false}
-                inputReadOnly={true}
-                {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
+        <>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="submission_date"
+                label={t("submissionDate")}
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("submissionDate")}`,
+                  },
+                ]}
+              >
+                <DatePicker
+                  style={{ width: "100%" }}
+                  allowClear={false}
+                  inputReadOnly={true}
+                  {...utils.FORM_DATEPICKER_PROPS}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="io_filter"
+                label={t("I/O Pabrik")}
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("I/O Pabrik")}`,
+                  },
+                ]}
+              >
+                <Select
+                  showSearch
+                  placeholder={`${t("select")} ${t("I/O Pabrik")}`}
+                  {...configs.FORM_SELECT_SEARCHABLE_PROPS}
+                  options={constant.WAREHOUSE_LIST}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="category_filter"
+                label={t("Item Category")}
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("Item Category")}`,
+                  },
+                ]}
+              >
+                <Select
+                  showSearch
+                  placeholder={`${t("select")} ${t("Item Category")}`}
+                  {...configs.FORM_SELECT_SEARCHABLE_PROPS}
+                  options={constant.PPIC_CATEGORY_LIST}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label={t("No PR/PO")}
+                name="po_number"
+                rules={[
+                  {
+                    message: `${t("please")} ${t("input")} ${t("No PR/PO")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("No PR/PO")}`} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="supplier_name"
+                label={t("supplierName")}
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("supplierName")}`,
+                  },
+                ]}
+              >
+                <Select
+                  showSearch
+                  placeholder={`${t("select")} ${t("supplier")}`}
+                  {...configs.FORM_SELECT_SEARCHABLE_PROPS}
+                  options={suppliers}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label={t("Qty PR/PO")}
+                name="po_qty"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("Qty PR/PO")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("Qty PR/PO")}`} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label={t("Outs PR/PO")}
+                name="po_outs"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("Outs PR/PO")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("Outs PR/PO")}`} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label={t("SKUCode")}
+                name="sku_code"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("SKUCode")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("SKUCode")}`} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label={t("SKUName")}
+                name="sku_name"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("SKUName")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("SKUName")}`} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label={t("qtyDelivery")}
+                name="qty_delivery"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("qtyDelivery")}`,
+                  },
+                ]}
+              >
+                <Input placeholder={`${t("input")} ${t("qtyDelivery")}`} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label={t("estDelivery")}
+                name="est_delivery"
+                rules={[
+                  {
+                    required: true,
+                    message: `${t("please")} ${t("input")} ${t("estDelivery")}`,
+                  },
+                ]}
+              >
+                <DatePicker
+                  style={{ width: "100%" }}
+                  allowClear={false}
+                  inputReadOnly={true}
+                  {...utils.FORM_DATEPICKER_PROPS}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
-            <Form.Item
-              label={t("No PR/PO")}
-              name="po_number"
-              rules={[{ required: true, message: `${t("please")} ${t("input")} ${t("No PR/PO")}` }]}
-            >
-              <Input placeholder={`${t("input")} ${t("No PR/PO")}`} />
-            </Form.Item>
-
-            <Form.Item
-              label={t("Line Number")}
-              name="line_num"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("Line Number")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("Line Number")}`} />
-            </Form.Item>
-
-            <Form.Item
-              label={t("qtyDelivery")}
-              name="qty_delivery"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("qtyDelivery")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("qtyDelivery")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("estDelivery")}
-              name="est_delivery"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("estDelivery")}`,
-                },
-              ]}
-            >
-              <DatePicker
-                allowClear={false}
-                inputReadOnly={true}
-                {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
-            <Form.Item className="mb-0 text-right">
-              <Button type="secondary" className="mr-2" onClick={onCancel}>
-                {t("cancel")}
-              </Button>
-              <Button type="primary" htmlType="submit">
-                {t("submit")}
-              </Button>
-            </Form.Item>
-          </>
-        ) : (
-          <>
-            <Form.Item
-              name="submission_date"
-              label={t("submissionDate")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("submissionDate")}`,
-                },
-              ]}
-            >
-              <DatePicker
-                allowClear={false}
-                inputReadOnly={true}
-                {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
-            <Form.Item
-              name="io_filter"
-              label={t("I/O Pabrik")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("I/O Pabrik")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("I/O Pabrik")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={constant.WAREHOUSE_LIST}
-              />
-            </Form.Item>
-            <Form.Item
-              name="category_filter"
-              label={t("Item Category")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("Item Category")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("Item Category")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={constant.PPIC_CATEGORY_LIST}
-              />
-            </Form.Item>
-            <Form.Item
-              name="supplier_name"
-              label={t("supplierName")}
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("supplierName")}`,
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                placeholder={`${t("select")} ${t("supplier")}`}
-                {...configs.FORM_SELECT_SEARCHABLE_PROPS}
-                options={suppliers}
-              />
-            </Form.Item>
-
-            <Form.Item
-              label={t("No PR/PO")}
-              name="po_number"
-              rules={[
-                {
-                  message: `${t("please")} ${t("input")} ${t("No PR/PO")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("No PR/PO")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("Qty PR/PO")}
-              name="po_qty"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("Qty PR/PO")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("Qty PR/PO")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("Outs PR/PO")}
-              name="po_outs"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("Outs PR/PO")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("Outs PR/PO")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("SKUCode")}
-              name="sku_code"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("SKUCode")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("SKUCode")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("SKUName")}
-              name="sku_name"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("SKUName")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("SKUName")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("qtyDelivery")}
-              name="qty_delivery"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("qtyDelivery")}`,
-                },
-              ]}
-            >
-              <Input placeholder={`${t("input")} ${t("qtyDelivery")}`} />
-            </Form.Item>
-            <Form.Item
-              label={t("estDelivery")}
-              name="est_delivery"
-              rules={[
-                {
-                  required: true,
-                  message: `${t("please")} ${t("input")} ${t("estDelivery")}`,
-                },
-              ]}
-            >
-              <DatePicker
-                allowClear={false}
-                inputReadOnly={true}
-                {...utils.FORM_DATEPICKER_PROPS}
-              />
-            </Form.Item>
-            <Form.Item className="mb-0 text-right">
-              <Button type="secondary" className="mr-2" onClick={onCancel}>
-                {t("cancel")}
-              </Button>
-              <Button type="primary" htmlType="submit">
-                {t("submit")}
-              </Button>
-            </Form.Item>
-          </>
-        )}
+          <Form.Item
+            name={"notes"}
+            label={t("notes")}
+            rules={[
+              {
+                message: `${t("input")} ${t("notes")}`,
+              },
+            ]}
+          >
+            <Input.TextArea
+              placeholder={`${t("input")} ${t("notes")}`}
+              rows={constant.FORM_TEXT_AREA_ROW}
+              maxLength={constant.FORM_TEXT_AREA_LIMIT}
+            />
+          </Form.Item>
+          <Form.Item className="mb-0 text-right">
+            <Button type="secondary" className="mr-2" onClick={onCancel}>
+              {t("cancel")}
+            </Button>
+            <Button type="primary" htmlType="submit">
+              {t("submit")}
+            </Button>
+          </Form.Item>
+        </>
       </Form>
     </>
   );

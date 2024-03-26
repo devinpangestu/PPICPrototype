@@ -13,7 +13,6 @@ export const havePermission = (userPermissions, ...neededPermission) => {
 };
 
 export const redirectRole = (userRole, ...neededRole) => {
- 
   if (neededRole != userRole) {
     return false;
   }
@@ -45,7 +44,7 @@ export const getMonthsDropdownOpt = () => {
 };
 
 export const getFeeTypeDropdownOpt = () => {
-  const feeTypes = ["fixed_amount", "percentage"]; 
+  const feeTypes = ["fixed_amount", "percentage"];
   const mapFeeTypes = { fixed_amount: "Amount", percentage: "Percentage" };
 
   const feeTypeOpt = [];

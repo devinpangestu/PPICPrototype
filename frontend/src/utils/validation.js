@@ -2,7 +2,6 @@ import constant from "constant";
 import swalCommon from "./swal";
 import moment from "moment";
 
-
 export const isPriceMonthsValid = (prices = []) => {
   let lastMonthIdx = -1;
   for (const p of prices) {
@@ -28,7 +27,7 @@ export const isEmptyStr = (x) => {
 };
 
 export const isNull = (x) => {
-  return !x || x === 0 || x === "0" || x === false || x === "";
+  return !x || x === 0 || x === "0" || x === false || x === "" || x === null || x === undefined;
 };
 
 // list is react select obj list
@@ -129,4 +128,8 @@ export const sendToApiFormat = (inputDate) => {
     // Handle invalid dates as needed
     return null;
   }
+};
+
+export const removeNonPrintableCharacters = (str) => {
+  return str.replace(/[^\x20-\x7E]/g, ""); // Removes all non-printable ASCII characters
 };

@@ -1,11 +1,14 @@
 import utils from "utils";
 import { Decrypt } from "utils/encryption";
-import create from "zustand";
+import { create } from "zustand";
 
 const userInfo = utils.getUserInfo();
 export const useDataStore = create((set) => ({
   modalImportCSVShow: false,
   setModalImportCSVShow: (show) => set({ modalImportCSVShow: show }),
+
+  modalExportShow: false,
+  setModalExportShow: (show) => set({ modalExportShow: show }),
 
   modalCreateShow: false,
   setModalCreateShow: (show) => set({ modalCreateShow: show }),

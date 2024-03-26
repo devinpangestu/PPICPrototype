@@ -20,6 +20,7 @@ import {
   Tag,
   Input,
   Card,
+  Tooltip,
 } from "antd";
 import { api } from "api";
 import { useTranslation } from "react-i18next";
@@ -47,6 +48,7 @@ import { useDataStore } from "state/ppic/dataState";
 import { Decrypt } from "utils/encryption";
 import { renderPlainColFindLabel } from "utils/table";
 import { render } from "less";
+import ModalExport from "components/ModalExport";
 
 const EditableContext = React.createContext(null);
 const EditableRow = ({ index, ...props }) => {
@@ -255,8 +257,12 @@ const PPICView = (props) => {
   const statusMapping = {
     A: "PPIC Init",
     C: "Retur From Procurement",
+    E: "At Supplier",
     G: "Request Changes From Supplier",
     // OK: "Confirmed Schedule",
+    X: "Completed",
+  };
+  const statusQAQCMapping = {
     X: "Completed",
   };
 
@@ -268,12 +274,19 @@ const PPICView = (props) => {
 
   const pageSize = configs.pageSize.ppic.dashboard;
 
-  // let defaultFilterStatus = null;
+  let defaultFilterStatus = null;
   let defaultActiveTab = "all";
 
+  if (userInfo.role.id === 6) {
+    defaultFilterStatus = constant.FLAG_STATUS_COMPLETE_SCHEDULE;
+    defaultActiveTab = defaultFilterStatus;
+  }
   const [expandable, setExpandable] = useState({
     expandedRowRender: (record) => {
-      if (record.flag_status === constant.FLAG_STATUS_PPIC_INIT) {
+      if (
+        record.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
+        record.flag_status === constant.FLAG_STATUS_SUPPLIER
+      ) {
         return (
           <p style={{ margin: 0, fontSize: "1rem" }}>
             {`${moment(JSON.parse(record.notes)?.init?.created_at).format(
@@ -308,9 +321,13 @@ const PPICView = (props) => {
           <p style={{ margin: 0, fontSize: "1rem" }}>
             {`${moment(JSON.parse(record.notes)?.retur?.created_at).format(
               constant.FORMAT_DISPLAY_DATETIME,
-            )} ${JSON.parse(record.notes)?.retur?.created_by} : ${
-              JSON.parse(record.notes)?.retur?.notes
-            }`}
+            )}`}
+            <strong>
+              {" "}
+              {`${JSON.parse(record.notes)?.retur?.created_by} : ${
+                JSON.parse(record.notes)?.retur?.notes
+              }`}
+            </strong>
           </p>
         );
       }
@@ -327,7 +344,7 @@ const PPICView = (props) => {
       return checkFlagStatus(record);
     },
   });
-
+  const [filterStatus, setFilterStatus] = useState(defaultFilterStatus);
   const {
     dateRange,
     setDateRange,
@@ -335,8 +352,7 @@ const PPICView = (props) => {
     setSuppliers,
     PPICs,
     setPPICs,
-    filterStatus,
-    setFilterStatus,
+
     pageNumber,
     setPageNumber,
     totalData,
@@ -353,6 +369,8 @@ const PPICView = (props) => {
   const {
     modalImportCSVShow,
     setModalImportCSVShow,
+    modalExportShow,
+    setModalExportShow,
     modalCreateShow,
     setModalCreateShow,
     modalSplitScheduleShow,
@@ -443,6 +461,7 @@ const PPICView = (props) => {
       //     item.flag_status !== constant.FLAG_STATUS_SUPPLIER &&
       //     !item.deleted_at,
       // );
+
       setDataSource([...offerData]);
       if (
         !filteredInfo.po_number &&
@@ -594,9 +613,9 @@ const PPICView = (props) => {
       !filteredInfo.io_filter &&
       !filteredInfo.category_filter
     ) {
-      setDataSource(extra.currentDataSource);
-    } else {
       setDataSource(oldDataSource);
+    } else {
+      setDataSource(extra.currentDataSource);
     }
   };
 
@@ -618,10 +637,9 @@ const PPICView = (props) => {
   };
 
   const onResetFilter = async () => {
-    setPageLoading(true);
     setFilterValue({
       supplier_id: null,
-      user_id: Decrypt(userInfo.user_id),
+      user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
       search_PO: null,
       io_filter: null,
       category_filter: null,
@@ -637,11 +655,11 @@ const PPICView = (props) => {
       from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
       to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
       supplier_id: null,
-      user_id: Decrypt(userInfo.user_id),
+      user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
       io_filter: null,
       category_filter: null,
       search_PO: null,
-      status: filterStatus ?? null,
+      status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
     };
     await fetchData(otherParams);
     await fetchSummary(otherParams);
@@ -650,35 +668,7 @@ const PPICView = (props) => {
   useEffect(() => {
     let isMounted = true;
     if (isMounted) {
-      api.ppic
-        .needActionMinDate()
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          setDateRange([moment(rsBody.min_date), moment()]);
-          const otherParams = {
-            from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
-            to_date: moment().format(constant.FORMAT_API_DATE),
-            supplier_id: filterValue?.supplier_id ?? null,
-            user_id: filterValue?.user_id ?? Decrypt(userInfo.user_id) ?? null,
-            io_filter: filterValue?.io_filter ?? null,
-            category_filter: filterValue?.category_filter ?? null,
-            status: filterStatus,
-            search_PO: filterValue?.search_PO,
-          };
-          fetchSummary(otherParams);
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setFilterValue({
-            user_id: Decrypt(userInfo.user_id),
-          });
-          form.setFieldsValue({
-            user_filter: userInfo.user_name,
-          });
-          setMinDateLoaded(true);
-        });
+      loadMinDate();
       loadSuppliersOption();
       authorizationCheck(userInfo);
       passwordChangedCheck(userInfo);
@@ -728,6 +718,41 @@ const PPICView = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageNumber, minDateLoaded, filterStatus]);
 
+  const loadMinDate = async () => {
+    await api.ppic
+      .needActionMinDate()
+      .then(function (response) {
+        const rsBody = response.data.rs_body;
+        setDateRange([moment(rsBody.min_date), moment()]);
+        const otherParams = {
+          from_date: moment(rsBody.min_date).format(constant.FORMAT_API_DATE),
+          to_date: moment().format(constant.FORMAT_API_DATE),
+          supplier_id: filterValue?.supplier_id ?? null,
+          user_id:
+            filterValue?.user_id ?? userInfo.role.id !== 6
+              ? Decrypt(userInfo.user_id)
+              : null ?? null,
+          io_filter: filterValue?.io_filter ?? null,
+          category_filter: filterValue?.category_filter ?? null,
+          status: userInfo.role.id !== 6 ? filterStatus : "X" ?? null,
+          search_PO: filterValue?.search_PO,
+        };
+        fetchSummary(otherParams);
+      })
+      .catch(function (error) {
+        utils.swal.Error({ msg: utils.getErrMsg(error) });
+      })
+      .finally(function () {
+        setFilterValue({
+          user_id: userInfo.role.id !== 6 ? Decrypt(userInfo.user_id) : null,
+        });
+        form.setFieldsValue({
+          user_filter: userInfo.user_name,
+        });
+        setMinDateLoaded(true);
+      });
+  };
+
   const loadOffers = async () => {
     let errMsg;
 
@@ -738,7 +763,7 @@ const PPICView = (props) => {
     };
 
     if (filterStatus !== "deleted") {
-      if (filterStatus) otherParams.status = filterStatus;
+      if (filterStatus) otherParams.status = userInfo.role.id !== 6 ? filterStatus : "X";
       if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
       if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
       if (filterValue.io_filter) otherParams.io_filter = filterValue?.io_filter;
@@ -758,7 +783,7 @@ const PPICView = (props) => {
         await fetchData(otherParams);
       }
     } else {
-      if (filterStatus) otherParams.status = filterStatus;
+      if (filterStatus) otherParams.status = userInfo.role.id !== 6 ? filterStatus : "X";
       if (filterValue.supplier_id) otherParams.supplier_id = filterValue?.supplier_id;
       if (filterValue.user_id) otherParams.user_id = filterValue?.user_id;
       if (filterValue.io_filter) otherParams.io_filter = filterValue?.io_filter;
@@ -842,7 +867,19 @@ const PPICView = (props) => {
   //   setDataSource(newData);
   // };
   const handleSave = (row) => {
-    const keyToCompare = ["submission_date", "supplier_id", "po_number", "po_qty", "po_outs"];
+    const keyToCompare = [
+      "io_filter",
+      "category_filter",
+      "submission_date",
+      "supplier_id",
+      "po_number",
+      "po_qty",
+      "po_outs",
+      "sku_code",
+      "sku_name",
+      "qty_delivery",
+      "est_delivery",
+    ];
     const newData = [...dataSource];
 
     const index = newData.findIndex((item) => row.key === item.key);
@@ -881,7 +918,7 @@ const PPICView = (props) => {
       ...new Set(
         offers.map((item) => {
           if (dataIndex === "supplier_name") {
-            return item.supplier.name;
+            return item?.supplier?.name;
           } else if (dataIndex === "buyer_name") {
             return item?.buyer?.name;
           } else {
@@ -974,13 +1011,14 @@ const PPICView = (props) => {
         )
           return;
         if (
-          filteredInfo.po_number ||
-          filteredInfo.sku_code ||
-          filteredInfo.sku_name ||
-          filteredInfo.supplier_name ||
-          filteredInfo.buyer_name ||
-          filteredInfo.io_filter ||
-          filteredInfo.category_filter ||
+          // filteredInfo.po_number ||
+          // filteredInfo.sku_code ||
+          // filteredInfo.sku_name ||
+          // filteredInfo.supplier_name ||
+          // filteredInfo.buyer_name ||
+          // filteredInfo.io_filter ||
+          // filteredInfo.category_filter
+          // ||
           sortedInfo.column
         )
           return;
@@ -1148,10 +1186,20 @@ const PPICView = (props) => {
         : (a, b) => {
             return moment(a.submission_date) - moment(b.submission_date);
           },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
+      ellipsis: {
+        showTitle: false,
+      },
       render: (_, row) => {
-        return moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE);
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE)}
+          >
+            {moment(row.submission_date).format(constant.FORMAT_DISPLAY_DATE)}
+          </Tooltip>
+        );
       },
     },
     {
@@ -1159,16 +1207,32 @@ const PPICView = (props) => {
       dataIndex: "supplier_name",
       key: "supplier_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("supplier_name"),
       filteredValue: filteredInfo?.supplier_name || null,
       onFilter: (value, record) => {
         return record?.supplier?.name.includes(value);
       },
       filterSearch: true,
-      width: 100,
+      width: 250,
+      // ellipsis: {
+      //   showTitle: false,
+      // },
       render: (_, row) => {
-        return row?.supplier?.name;
+        if (editTableMode) {
+          return row?.supplier?.name || <Tag color="red">Fill Supplier</Tag>;
+        }
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={
+              row?.supplier?.name + " " + (row?.user_supplier?.email ? "" : "Email not registered")
+            }
+          >
+            {row?.supplier?.name} <br />
+            {row?.user_supplier?.email ? "" : <b>Email not registered</b>}
+          </Tooltip>
+        );
       },
     },
     {
@@ -1176,14 +1240,14 @@ const PPICView = (props) => {
       dataIndex: "po_number",
       key: "po_number",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("po_number"),
       filteredValue: filteredInfo.po_number || null,
       onFilter: (value, record) => {
         return value === "" ? record?.po_number === "" : record?.po_number.includes(value);
       },
       filterSearch: true,
-      width: "10vw",
+      width: 110,
       render: (_, row) => {
         if (editTableMode) {
           return row?.po_number || <Tag color="red">Please Fill PO Number</Tag>;
@@ -1201,7 +1265,7 @@ const PPICView = (props) => {
         : (a, b) => {
             return moment(a.po_qty) - moment(b.po_qty);
           },
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row?.po_qty);
@@ -1213,7 +1277,7 @@ const PPICView = (props) => {
       key: "po_outs",
       editable: editTableMode,
       sorter: editTableMode ? false : (a, b) => a.po_outs - b.po_outs,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       width: 100,
       render: (_, row) => {
         return utils.thousandSeparator(row?.po_outs);
@@ -1229,7 +1293,17 @@ const PPICView = (props) => {
       onFilter: (value, record) => record?.sku_code.includes(value),
       width: 150,
       filterSearch: true,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_code}>
+            {row?.sku_code}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("SKUName"),
@@ -1241,8 +1315,18 @@ const PPICView = (props) => {
       onFilter: (value, record) => record?.sku_name.includes(value),
 
       filterSearch: true,
-      width: 100,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      width: 150,
+      ellipsis: {
+        showTitle: false,
+      },
+      render: (_, row) => {
+        return (
+          <Tooltip placement="topLeft" title={row?.sku_name}>
+            {row?.sku_name}
+          </Tooltip>
+        );
+      },
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
     },
     {
       title: t("qtyDelivery"),
@@ -1272,6 +1356,40 @@ const PPICView = (props) => {
       width: 100,
       render: (_, row) => {
         return moment(row?.est_delivery).format(constant.FORMAT_DISPLAY_DATE) ?? "-";
+      },
+    },
+    {
+      title: t("sendSupplierDate"),
+      dataIndex: "send_supplier_date",
+      key: "send_supplier_date",
+      editable: editTableMode,
+      sorter: editTableMode
+        ? false
+        : (a, b) => {
+            return moment(a.send_supplier_date) - moment(b.send_supplier_date);
+          },
+      width: 100,
+      render: (_, row) => {
+        return row.send_supplier_date
+          ? moment(row.send_supplier_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
+      },
+    },
+    {
+      title: t("supplierConfirmDate"),
+      dataIndex: "supplier_confirm_date",
+      key: "supplier_confirm_date",
+      editable: editTableMode,
+      sorter: editTableMode
+        ? false
+        : (a, b) => {
+            return moment(a.supplier_confirm_date) - moment(b.supplier_confirm_date);
+          },
+      width: 100,
+      render: (_, row) => {
+        return row.supplier_confirm_date
+          ? moment(row.supplier_confirm_date).format(constant.FORMAT_DISPLAY_DATE)
+          : "-";
       },
     },
     {
@@ -1309,7 +1427,7 @@ const PPICView = (props) => {
       dataIndex: "buyer_name",
       key: "buyer_name",
       editable: editTableMode,
-      onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
+      // onCell: (_, index) => ({ ...getCellConfig(arrayOfMerge, index) }),
       filters: editTableMode ? false : filterColumnOpt("buyer_name"),
       filteredValue: filteredInfo?.buyer_name || null,
       onFilter: (value, record) => {
@@ -1326,7 +1444,7 @@ const PPICView = (props) => {
       dataIndex: "action",
       fixed: "right",
       key: "action",
-      width: 100,
+      width: 150,
       onCell: (_, index) => {
         if (
           filterStatus === constant.FLAG_STATUS_PPIC_INIT ||
@@ -1347,6 +1465,7 @@ const PPICView = (props) => {
         let btnSplit;
         let btnDelete;
         let tagStatus;
+        let tagHutangKirim;
         let btnAcceptSplit;
         let btnRejectSplit;
         let btnAcceptEdit;
@@ -1358,7 +1477,6 @@ const PPICView = (props) => {
             ...constant.MODAL_CONFIRM_DEFAULT_PROPS,
             content: text,
             onOk: () => {
-              setPageLoading(true);
               api(row.id)
                 .then((res) => {
                   message.success("Success");
@@ -1367,7 +1485,6 @@ const PPICView = (props) => {
                   utils.swal.Error({ msg: utils.getErrMsg(err) });
                 })
                 .finally(() => {
-                  setPageLoading(false);
                   loadOffers();
                   const otherParams = {
                     from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
@@ -1385,7 +1502,7 @@ const PPICView = (props) => {
           });
         };
 
-        const renderStatusTag = (color, text) => (
+        const renderTag = (color, text) => (
           <div
             style={{
               display: "flex",
@@ -1398,6 +1515,17 @@ const PPICView = (props) => {
             </Tag>
           </div>
         );
+        const renderStatusTag = (tagType, tagText) => {
+          const tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+          const tagStatus = renderTag(tagType, tagText);
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {tagHutangKirim}
+              {tagStatus}
+            </div>
+          );
+        };
         if (row.deleted_at !== null) return renderStatusTag("error", "Deleted");
         if (
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_FROM_PPIC ||
@@ -1406,7 +1534,7 @@ const PPICView = (props) => {
           return renderStatusTag("error", "at Procurement");
         }
         if (row.flag_status === constant.FLAG_STATUS_SUPPLIER) {
-          return renderStatusTag("error", `at Supplier ${row.supplier.name}`);
+          return renderStatusTag("error", `at Supplier ${row?.supplier?.name}`);
         }
         if (
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_REQUEST &&
@@ -1430,6 +1558,8 @@ const PPICView = (props) => {
           row.flag_status === constant.FLAG_STATUS_PPIC_INIT ||
           row.flag_status === constant.FLAG_STATUS_PROCUREMENT_RETUR
         ) {
+          tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
+
           btnSplit = (
             <Button
               className="mr-1 mb-1"
@@ -1492,6 +1622,7 @@ const PPICView = (props) => {
         }
         if (row.flag_status === constant.FLAG_STATUS_PPIC_REQUEST) {
           if (row.split_from_id !== null) {
+            tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
             tagStatus = renderStatusTag("warning", "Split Request");
             btnAcceptSplit = (
               <Button
@@ -1502,7 +1633,7 @@ const PPICView = (props) => {
                 onClick={() =>
                   renderConfirmationModal(
                     api.ppic.acceptSplit,
-                    `Are you sure to accept this split request and forward to PPIC?`,
+                    `Are you sure to accept this split request and mark this schedule as complete?`,
                   )
                 }
               >
@@ -1526,6 +1657,7 @@ const PPICView = (props) => {
               </Button>
             );
           } else if (row.edit_from_id !== null) {
+            tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
             tagStatus = <Tag color="warning">Edit Request</Tag>;
             btnAcceptEdit = (
               <Button
@@ -1536,7 +1668,7 @@ const PPICView = (props) => {
                 onClick={() =>
                   renderConfirmationModal(
                     api.ppic.acceptEdit,
-                    `Are you sure to accept this edit request and forward to PPIC?`,
+                    `Are you sure to accept this edit request and mark this schedule as complete?`,
                   )
                 }
               >
@@ -1561,6 +1693,7 @@ const PPICView = (props) => {
             );
           } else if (row.hutang_kirim) {
             tagStatus = <Tag color="warning">Close PO Request</Tag>;
+            tagHutangKirim = row.hutang_kirim ? renderTag("error", "Hutang Kirim") : null;
             btnAcceptClosePO = (
               <Button
                 className="mr-1 mt-2"
@@ -1596,22 +1729,25 @@ const PPICView = (props) => {
           }
           return (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {tagHutangKirim}
               {tagStatus}
-              {btnAcceptSplit}
-              {btnRejectSplit}
-              {btnAcceptEdit}
-              {btnRejectEdit}
-              {btnAcceptClosePO}
-              {btnRejectClosePO}
+              {utils.renderWithPermission(userInfo.permissions, btnAcceptSplit, "ppic@edit")}
+              {utils.renderWithPermission(userInfo.permissions, btnRejectSplit, "ppic@edit")}
+              {utils.renderWithPermission(userInfo.permissions, btnAcceptEdit, "ppic@edit")}
+              {utils.renderWithPermission(userInfo.permissions, btnRejectEdit, "ppic@edit")}
+              {utils.renderWithPermission(userInfo.permissions, btnAcceptClosePO, "ppic@edit")}
+              {utils.renderWithPermission(userInfo.permissions, btnRejectClosePO, "ppic@edit")}
             </div>
           );
         }
 
         return (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            {btnSplit}
+            {tagHutangKirim}
+
+            {utils.renderWithPermission(userInfo.permissions, btnSplit, "ppic@edit")}
             {/* {btnEdit} */}
-            {btnDelete}
+            {utils.renderWithPermission(userInfo.permissions, btnDelete, "ppic@edit")}
           </div>
         );
       },
@@ -1686,113 +1822,124 @@ const PPICView = (props) => {
                 filterStatus === constant.FLAG_STATUS_PROCUREMENT_RETUR) &&
                 !editTableMode && (
                   <>
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        if (previewRowChecked.filter((item) => item).length === 0) {
-                          Modal.error({
-                            content: "Please select at least one data",
-                          });
-                        } else {
-                          Modal.confirm({
-                            ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
-                            content: `There are ${
-                              previewRowChecked.filter((item) => item).length
-                            } out of ${previewRowChecked.length} data to be sent.}`,
-                            onOk: () => {
-                              setPageLoading(true);
-                              const data = offers.filter(
-                                (offer, index) => previewRowChecked[index],
-                              );
-                              api.ppic
-                                .sendToPurchasing(data)
-                                .then((res) => {
-                                  message.success("Success");
-                                })
-                                .catch((err) => {
-                                  utils.swal.Error({ msg: utils.getErrMsg(err) });
-                                })
-                                .finally(() => {
-                                  setPageLoading(false);
-                                  loadOffers();
-                                  const otherParams = {
-                                    from_date: moment(dateRange[0]).format(
-                                      constant.FORMAT_API_DATE,
-                                    ),
-                                    to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                                    supplier_id: filterValue?.supplier_id ?? null,
-                                    user_id: filterValue?.user_id ?? null,
-                                    io_filter: filterValue?.io_filter ?? null,
-                                    category_filter: filterValue?.category_filter ?? null,
-                                    status: filterStatus,
-                                    search_PO: filterValue?.search_PO,
-                                  };
+                    {utils.renderWithPermission(
+                      userInfo.permissions,
+                      <>
+                        <Button
+                          type="primary"
+                          onClick={() => {
+                            if (previewRowChecked.filter((item) => item).length === 0) {
+                              Modal.error({
+                                content: "Please select at least one data",
+                              });
+                            } else {
+                              Modal.confirm({
+                                ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
+                                content: `There are ${
+                                  previewRowChecked.filter((item) => item).length
+                                } out of ${previewRowChecked.length} data to be sent.}`,
+                                onOk: () => {
+                                  const data = offers.filter(
+                                    (offer, index) => previewRowChecked[index],
+                                  );
+                                  api.ppic
+                                    .sendToPurchasing(data)
+                                    .then((res) => {
+                                      message.success("Success");
+                                    })
+                                    .catch((err) => {
+                                      utils.swal.Error({ msg: utils.getErrMsg(err) });
+                                    })
+                                    .finally(() => {
+                                      setPageLoading(false);
+                                      loadOffers();
+                                      const otherParams = {
+                                        from_date: moment(dateRange[0]).format(
+                                          constant.FORMAT_API_DATE,
+                                        ),
+                                        to_date: moment(dateRange[1]).format(
+                                          constant.FORMAT_API_DATE,
+                                        ),
+                                        supplier_id: filterValue?.supplier_id ?? null,
+                                        user_id: filterValue?.user_id ?? null,
+                                        io_filter: filterValue?.io_filter ?? null,
+                                        category_filter: filterValue?.category_filter ?? null,
+                                        status: filterStatus,
+                                        search_PO: filterValue?.search_PO,
+                                      };
 
-                                  fetchSummary(otherParams);
-                                });
-                            },
-                          });
-                        }
-                      }}
-                      disabled={previewRowChecked.filter((item) => item === true).length === 0}
-                    >
-                      Send Schedule to Procurement
-                    </Button>
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        setDataSource(oldDataSource.sort((a, b) => a.key - b.key));
-                        setSortedInfo({});
-                        setPreviewRowChecked(dataSource.map(() => false));
-                        setEditTableMode(!editTableMode);
-                      }}
-                    >
-                      Change to Edit Mode
-                    </Button>
-                    {/* <Button
-                      type="primary"
-                      onClick={() => {
-                        Modal.confirm({
-                          ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
-                          content: `Refresh Outstanding PO from ${moment(dateRange[0]).format(
-                            constant.FORMAT_DISPLAY_DATE,
-                          )} to ${moment(dateRange[1]).format(constant.FORMAT_DISPLAY_DATE)}?`,
-                          onOk: () => {
-                            setPageLoading(true);
-                            const params = {
-                              from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
-                              to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                            };
-                            api.ppic
-                              .refreshPOOuts(params)
-                              .then((res) => {
-                                message.success("Success");
-                              })
-                              .catch((err) => {
-                                utils.swal.Error({ msg: utils.getErrMsg(err) });
-                              })
-                              .finally(() => {
-                                setPageLoading(false);
-                                loadOffers();
-                                const otherParams = {
+                                      fetchSummary(otherParams);
+                                    });
+                                },
+                              });
+                            }
+                          }}
+                          disabled={previewRowChecked.filter((item) => item === true).length === 0}
+                        >
+                          Send Schedule to Procurement
+                        </Button>
+                        <Button
+                          type="primary"
+                          onClick={() => {
+                            setDataSource(oldDataSource.sort((a, b) => a.key - b.key));
+                            setSortedInfo({});
+                            setPreviewRowChecked(dataSource.map(() => false));
+                            setEditTableMode(!editTableMode);
+                          }}
+                        >
+                          Change to Edit Mode
+                        </Button>
+                        {/* <Button
+                          type="primary"
+                          onClick={() => {
+                            Modal.confirm({
+                              ...constant.MODAL_SUCCESS_DEFAULT_PROPS,
+                              content: `Refresh Outstanding PO from ${moment(dateRange[0]).format(
+                                constant.FORMAT_DISPLAY_DATE,
+                              )} to ${moment(dateRange[1]).format(constant.FORMAT_DISPLAY_DATE)}?`,
+                              onOk: () => {
+                                setPageLoading(true);
+                                const params = {
                                   from_date: moment(dateRange[0]).format(constant.FORMAT_API_DATE),
                                   to_date: moment(dateRange[1]).format(constant.FORMAT_API_DATE),
-                                  supplier_id: filterValue?.supplier_id ?? null,
-                                  user_id: filterValue?.user_id ?? null,
-                                  io_filter: filterValue?.io_filter ?? null,
-                                  category_filter: filterValue?.category_filter ?? null,
-                                  status: filterStatus,
-                                  search_PO: filterValue?.search_PO,
                                 };
+                                api.ppic
+                                  .refreshPOOuts(params)
+                                  .then((res) => {
+                                    message.success("Success");
+                                  })
+                                  .catch((err) => {
+                                    utils.swal.Error({ msg: utils.getErrMsg(err) });
+                                  })
+                                  .finally(() => {
+                                    setPageLoading(false);
+                                    loadOffers();
+                                    const otherParams = {
+                                      from_date: moment(dateRange[0]).format(
+                                        constant.FORMAT_API_DATE,
+                                      ),
+                                      to_date: moment(dateRange[1]).format(
+                                        constant.FORMAT_API_DATE,
+                                      ),
+                                      supplier_id: filterValue?.supplier_id ?? null,
+                                      user_id: filterValue?.user_id ?? null,
+                                      io_filter: filterValue?.io_filter ?? null,
+                                      category_filter: filterValue?.category_filter ?? null,
+                                      status: filterStatus,
+                                      search_PO: filterValue?.search_PO,
+                                    };
 
-                                fetchSummary(otherParams);
-                              });
-                          },
-                        });
-                      }}
-                    >
-                      Refresh Outstanding PO
-                    </Button> */}
+                                    fetchSummary(otherParams);
+                                  });
+                              },
+                            });
+                          }}
+                        >
+                          Refresh Outstanding PO
+                        </Button> */}
+                      </>,
+                      "ppic@edit",
+                    )}
                   </>
                 )}
 
@@ -1828,7 +1975,7 @@ const PPICView = (props) => {
                           utils.swal.Error({ msg: utils.getErrMsg(err) });
                         })
                         .finally(() => {
-                          setPageLoading(false);
+                          loadOffers();
                         });
                     }}
                   >
@@ -1905,47 +2052,66 @@ const PPICView = (props) => {
     setPageNumber(1);
   };
 
-  const tabPanes = [
-    <Tabs.TabPane
-      tab={
-        <>
-          <span className="mr-1">{t("all")}</span>
-          {offerSummaryTotal ? <Badge count={offerSummaryTotal} /> : null}
-        </>
-      }
-      key="all"
-    >
-      {filterStatus === null && renderTable()}
-    </Tabs.TabPane>,
-  ];
-  for (const status in statusMapping) {
+  const tabPanes = [];
+  if (userInfo.role.id !== 6) {
     tabPanes.push(
       <Tabs.TabPane
         tab={
           <>
-            <span className="mr-1">{utils.snakeToTitleCase(statusMapping[status])}</span>
-            {offerSummary && offerSummary[status] && <Badge count={offerSummary[status]} />}
+            <span className="mr-1">{t("all")}</span>
+            {offerSummaryTotal ? <Badge count={offerSummaryTotal} /> : null}
           </>
         }
-        key={status}
-        children={<>{filterStatus && filterStatus === status && <>{renderTable()}</>}</>}
-      />,
+        key="all"
+      >
+        {filterStatus === null && renderTable()}
+      </Tabs.TabPane>,
     );
+    for (const status in statusMapping) {
+      tabPanes.push(
+        <Tabs.TabPane
+          tab={
+            <>
+              <span className="mr-1">{utils.snakeToTitleCase(statusMapping[status])}</span>
+              {offerSummary && offerSummary[status] && <Badge count={offerSummary[status]} />}
+            </>
+          }
+          key={status}
+          children={<>{filterStatus && filterStatus === status && <>{renderTable()}</>}</>}
+        />,
+      );
+    }
+    tabPanes.push(
+      <Tabs.TabPane
+        tab={
+          <>
+            {t("Deleted")}
+            {offerSummary && offerSummary["deleted"] && <Badge count={offerSummary["deleted"]} />}
+          </>
+        }
+        key="deleted"
+      >
+        {renderTable()}
+      </Tabs.TabPane>,
+    );
+  } else {
+    for (const statusQAQC in statusQAQCMapping) {
+      tabPanes.push(
+        <Tabs.TabPane
+          tab={
+            <>
+              <span className="mr-1">{utils.snakeToTitleCase(statusQAQCMapping[statusQAQC])}</span>
+              {offerSummary && offerSummary[statusQAQC] && (
+                <Badge count={offerSummary[statusQAQC]} />
+              )}
+            </>
+          }
+          key={statusQAQC}
+          children={<>{filterStatus && filterStatus === statusQAQC && <>{renderTable()}</>}</>}
+        />,
+      );
+    }
   }
-
-  tabPanes.push(
-    <Tabs.TabPane
-      tab={
-        <>
-          {t("Deleted")}
-          {offerSummary && offerSummary["deleted"] && <Badge count={offerSummary["deleted"]} />}
-        </>
-      }
-      key="deleted"
-    >
-      {renderTable()}
-    </Tabs.TabPane>,
-  );
 
   if (!minDateLoaded) return null;
 
@@ -1978,6 +2144,18 @@ const PPICView = (props) => {
           )}
         </>
       }
+      btnAction={utils.renderWithPermission(
+        userInfo.permissions,
+        <Button
+          size="small"
+          onClick={() => {
+            setModalExportShow(true);
+          }}
+        >
+          {t("exportXLSX")}
+        </Button>,
+        "ppic@view",
+      )}
       breadcrumbs={[
         {
           text: t("PPIC"),
@@ -2005,9 +2183,15 @@ const PPICView = (props) => {
             status: filterStatus,
             search_PO: filterValue?.search_PO,
           };
-
+          loadMinDate();
           fetchSummary(otherParams);
         }}
+      />
+      <ModalExport
+        visible={modalExportShow}
+        onCancel={() => setModalExportShow(false)}
+        data={dataSource}
+        exportType={"ppic"}
       />
       <ModalSplitSchedule
         visible={modalSplitScheduleShow}
@@ -2083,103 +2267,107 @@ const PPICView = (props) => {
 
       <SyncOverlay loading={pageLoading} />
       <Row gutter={16}>
-        <Col xs={24} lg={24} xl={24}>
-          <Card size="small">
-            <SectionHeading title={"Filter"} withDivider />
-            <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
-              <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item
-                    label="Date Range"
-                    className="mb-2"
-                    name="date"
-                    wrapperCol={{ flex: "auto" }}
-                  >
-                    <DatePicker.RangePicker
-                      defaultValue={dateRange}
-                      value={dateRange}
-                      style={{ width: "100%" }}
-                      {...utils.FORM_RANGEPICKER_PROPS}
-                      onChange={(dates, dateStrings) => {
-                        setDateRange(dates);
-                        const otherParams = {
-                          from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
-                          to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
-                          supplier_id: filterValue?.supplier_id ?? null,
-                          user_id: filterValue?.user_id ?? null,
-                          io_filter: filterValue?.io_filter ?? null,
-                          category_filter: filterValue?.category_filter ?? null,
-                          status: filterStatus,
-                          search_PO: filterValue?.search_PO,
-                        };
+        {(userInfo.role.id === constant.ROLE_SUPER_ADMIN ||
+          userInfo.role.id === constant.ROLE_PPIC) && (
+          <Col xs={24} lg={24} xl={24}>
+            <Card size="small">
+              <SectionHeading title={"Filter"} withDivider />
+              <Form form={form} layout="vertical" className="form-filter" onFinish={onSearch}>
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="Date Range"
+                      className="mb-2"
+                      name="date"
+                      wrapperCol={{ flex: "auto" }}
+                    >
+                      <DatePicker.RangePicker
+                        defaultValue={dateRange}
+                        value={dateRange}
+                        style={{ width: "100%" }}
+                        {...utils.FORM_RANGEPICKER_PROPS}
+                        onChange={(dates, dateStrings) => {
+                          setDateRange(dates);
+                          const otherParams = {
+                            from_date: moment(dates[0]).format(constant.FORMAT_API_DATE),
+                            to_date: moment(dates[1]).format(constant.FORMAT_API_DATE),
+                            supplier_id: filterValue?.supplier_id ?? null,
+                            user_id: filterValue?.user_id ?? null,
+                            io_filter: filterValue?.io_filter ?? null,
+                            category_filter: filterValue?.category_filter ?? null,
+                            status: filterStatus,
+                            search_PO: filterValue?.search_PO,
+                          };
 
-                        fetchSummary(otherParams);
-                      }}
-                      allowClear={false}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="User" name="user_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select User"
-                      optionFilterProp="children"
-                      // onChange={onChangeUserList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={PPICs}
-                      defaultValue={userInfo.user_name}
-                    />
-                  </Form.Item>
-                </Col>
-                {/* <Col span={12}>
+                          fetchSummary(otherParams);
+                        }}
+                        allowClear={false}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="User" name="user_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select User"
+                        optionFilterProp="children"
+                        // onChange={onChangeUserList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={PPICs}
+                        defaultValue={userInfo.user_name}
+                      />
+                    </Form.Item>
+                  </Col>
+                  {/* <Col span={12}>
                   <Form.Item label="Search by PO Number" className="mb-1" name="search_PO">
                     <Input placeholder={t("searchPO")} />
                   </Form.Item>
                 </Col> */}
-              </Row>
-              <Row gutter={8}>
-                <Col span={12}>
-                  <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select I/O"
-                      optionFilterProp="children"
-                      // onChange={onChangeSupplierList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={constant.WAREHOUSE_LIST}
-                      defaultValue={null}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item label="Category" name="category_filter" className="mb-2">
-                    <Select
-                      showSearch
-                      placeholder="Select Category"
-                      optionFilterProp="children"
-                      // onChange={onChangeSupplierList}
-                      style={{ width: "100%" }}
-                      filterOption={filterOption}
-                      options={constant.PPIC_CATEGORY_LIST}
-                      defaultValue={null}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item className="mb-2">
-                <Button type="primary" htmlType="submit">
-                  {t("applyFilter")}
-                </Button>{" "}
-                <Button type="" onClick={onResetFilter}>
-                  Reset Filter
-                </Button>
-              </Form.Item>
-            </Form>
-          </Card>
-        </Col>
+                </Row>
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Form.Item label="I/O Pabrik" name="io_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select I/O"
+                        optionFilterProp="children"
+                        // onChange={onChangeSupplierList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={constant.WAREHOUSE_LIST}
+                        defaultValue={null}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Category" name="category_filter" className="mb-2">
+                      <Select
+                        showSearch
+                        placeholder="Select Category"
+                        optionFilterProp="children"
+                        // onChange={onChangeSupplierList}
+                        style={{ width: "100%" }}
+                        filterOption={filterOption}
+                        options={constant.PPIC_CATEGORY_LIST}
+                        defaultValue={null}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item className="mb-2">
+                  <Button type="primary" htmlType="submit">
+                    {t("applyFilter")}
+                  </Button>{" "}
+                  <Button type="" onClick={onResetFilter}>
+                    Reset Filter
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Card>
+          </Col>
+        )}
+
         <Col xs={24} lg={24} xl={24}>
           <Tabs defaultActiveKey={defaultActiveTab} onChange={onTabChanged}>
             {tabPanes}

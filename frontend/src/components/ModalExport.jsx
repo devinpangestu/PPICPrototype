@@ -10,18 +10,14 @@ import configs from "configs";
 function ModalExport(props) {
   const [t] = useTranslation();
   const [form] = Form.useForm();
-  const { visible, onCancel, exportType, id } = props;
-
+  const { visible, onCancel, exportType, data } = props;
   const [processingExport, setProcessingExport] = useState(false);
 
   const handleOnSubmit = (values) => {
-    const dateFrom = moment(values.date[0]).format(constant.FORMAT_DISPLAY_DATE);
-    const dateTo = moment(values.date[1]).format(constant.FORMAT_DISPLAY_DATE);
-
     setProcessingExport(true);
-
+    console.log(exportType);
     api.dataExport
-      .xlsx(exportType, dateFrom, dateTo, id)
+      .xlsx(exportType, data)
       .then(function (response) {
         setProcessingExport(false);
         setTimeout(() => {
@@ -36,21 +32,13 @@ function ModalExport(props) {
 
   return (
     <Modal
-      title={`${t("export")} ${utils.snakeToTitleCase(exportType)}`}
+      title={`${t("export")} ${utils.capitalizeCase(exportType)}`}
       open={visible}
       onCancel={onCancel}
       footer={null}
       centered
     >
       <Form form={form} onFinish={handleOnSubmit}>
-        <Form.Item
-          name="date"
-          label={`${t("date")}`}
-          rules={[{ required: true, message: `${t("please")} ${t("input")} ${t("date")}` }]}
-          wrapperCol={{ flex: "auto" }}
-        >
-          <DatePicker.RangePicker style={{ width: "100%" }} {...utils.FORM_RANGEPICKER_PROPS} />
-        </Form.Item>
         <Form.Item wrapperCol={{ span: 24 }} className="text-right mb-0">
           <Button type="secondary" className="mr-2" onClick={onCancel}>
             {t("cancel")}
