@@ -86,13 +86,13 @@ function ModalImportCSV({ visible, onCancel, onSuccess, setPageLoading, id }) {
           //   continue;
           // }
           if (!sendToApiFormat(r[2])) {
-            utils.swal.Error({ msg: "Invalid CSV Format on Column 2 expected 'Submission Date'" });
+            utils.swal.Error({ msg: "Invalid CSV Format on Column C (3) expected 'Submission Date'" });
             setIsUploading(false);
             return;
           }
           if (!sendToApiFormat(r[10])) {
             utils.swal.Error({
-              msg: "Invalid CSV Format on Column 2 expected 'Est Delivery Date'",
+              msg: "Invalid CSV Format on Column K (11) expected 'Est Delivery Date'",
             });
             setIsUploading(false);
             return;
