@@ -12,6 +12,7 @@ import {
   Switch,
   InputNumber,
   Descriptions,
+  Alert,
 } from "antd";
 import { SpinnerOverlay, SyncOverlay } from "components";
 import { ReloadOutlined } from "@ant-design/icons";
@@ -44,7 +45,7 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
   const [showPRDetail, setShowPRDetail] = useState(false);
   const [selectedSKU, setSelectedSKU] = useState({});
   const [SKUNameOptions, setSKUNameOptions] = useState([]);
-
+  const [showAlertNotValidPOPR, setShowAlertNotValidPOPR] = useState(false);
   const handleSwitchAutoFillChange = (checked) => {
     setAutoFill(checked);
   };
@@ -138,59 +139,35 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
     form.resetFields();
   };
 
-  const handleRefreshPOPR = (value, _e, info) => {
+  const handleRefreshPOPR = async (value, _e, info) => {
     setPageLoading(true);
     const poNumber = form.getFieldValue("po_number");
-    if (poNumber.substring(0, 2) === "PR") {
-      api.ppic
-        .getPRDetail({ pr_number: poNumber })
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          let skuNameOptions = [];
-          console.log(rsBody);
-          if (rsBody) {
-            rsBody.forEach((el) => {
-              skuNameOptions.push({ value: el.LINE_NUM, label: el.SKU_NAME });
-            });
-          } else {
-            utils.swal.Error({ msg: "No Data in this PR" });
-          }
-          setPRDetail(rsBody);
-          setSKUNameOptions(skuNameOptions);
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setPageLoading(false);
-        });
-    } else if (poNumber.substring(0, 2) === "PO" || poNumber.substring(0, 2) === "PI") {
-      api.ppic
-        .getPODetail({ po_number: poNumber })
-        .then(function (response) {
-          const rsBody = response.data.rs_body;
-          let skuNameOptions = [];
-          if (rsBody) {
-            console.log(rsBody);
-            if (rsBody) {
-              rsBody.forEach((el) => {
-                skuNameOptions.push({ value: el.LINE_NUM, label: el.SKU_NAME });
-              });
-            } else {
-              utils.swal.Error({ msg: "No Data in this PO" });
-            }
-            setPRDetail(rsBody);
-            setSKUNameOptions(skuNameOptions);
-          } else {
-            utils.swal.Error({ msg: "No Data in this PO" });
-          }
-        })
-        .catch(function (error) {
-          utils.swal.Error({ msg: utils.getErrMsg(error) });
-        })
-        .finally(function () {
-          setPageLoading(false);
-        });
+    if (disableRefreshPOPR) {
+      setShowAlertNotValidPOPR(true);
+      setPageLoading(false);
+    }
+    try {
+      let rsBody;
+      if (poNumber.substring(0, 2) === "PR") {
+        rsBody = await api.ppic.getPRDetail({ pr_number: poNumber });
+      } else if (poNumber.substring(0, 2) === "PO" || poNumber.substring(0, 2) === "PI") {
+        rsBody = await api.ppic.getPODetail({ po_number: poNumber });
+      }
+      if (rsBody) {
+        console.log(rsBody);
+        const skuNameOptions = rsBody.data.rs_body.map((el) => ({
+          value: el.LINE_NUM,
+          label: el.SKU_NAME,
+        }));
+        setPRDetail(rsBody.data.rs_body);
+        setSKUNameOptions(skuNameOptions);
+      } else {
+        utils.swal.Error({ msg: `No Data in this ${poNumber.substring(0, 2)}` });
+      }
+    } catch (error) {
+      utils.swal.Error({ msg: utils.getErrMsg(error) });
+    } finally {
+      setPageLoading(false);
     }
   };
 
@@ -430,6 +407,9 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
             </Row>
             <Row gutter={16}>
               <Col span={24}>
+                {showAlertNotValidPOPR && (
+                  <Alert message="No PR/PO is not valid" type="error" showIcon />
+                )}
                 <Form.Item
                   label={`No PR/PO ${lineNumShowManual ? "" : ""}`}
                   name="po_number"
@@ -443,21 +423,24 @@ const ScheduleForm = ({ isEdit, id, onCancel, onSuccess, history }) => {
                   <Input
                     onChange={(e) => {
                       if (e.target.value) {
-                        setDisableRefreshPOPR(false);
                         setShowPRDetail(false);
+                        setShowAlertNotValidPOPR(false);
                         setPRDetail([]);
                         setSKUNameOptions([]);
                         form.setFieldsValue({ sku_name: null });
                         if (e.target.value.substring(0, 2) === "PR") {
                           setLineNumShowManual(true);
                           setSkuCodeShowManual(true);
+                          setDisableRefreshPOPR(false);
                         } else if (
                           e.target.value.substring(0, 2) === "PO" ||
                           e.target.value.substring(0, 2) === "PI"
                         ) {
+                          setDisableRefreshPOPR(false);
                           setSkuCodeShowManual(false);
                           setLineNumShowManual(true);
                         } else {
+                          setDisableRefreshPOPR(true);
                           setSkuCodeShowManual(false);
                           setLineNumShowManual(false);
                         }
